@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-20T19:56:42Z",
+  "title": "Design System for NorthCape 4000",
+  "extensions": {
+    "colorMeta": {
+      "route": {
+        "role": "primary",
+        "displayName": "Route coral",
+        "tonalRamp": [
+          "oklch(15% 0.060 29.2)",
+          "oklch(25% 0.103 29.2)",
+          "oklch(36% 0.129 29.2)",
+          "oklch(47% 0.147 29.2)",
+          "oklch(58% 0.158 29.2)",
+          "oklch(69% 0.129 29.2)",
+          "oklch(82% 0.073 29.2)",
+          "oklch(95% 0.024 29.2)"
+        ]
+      },
+      "route-hover": {
+        "role": "primary",
+        "displayName": "Light coral",
+        "tonalRamp": [
+          "oklch(15% 0.046 28.7)",
+          "oklch(25% 0.079 28.7)",
+          "oklch(36% 0.099 28.7)",
+          "oklch(47% 0.113 28.7)",
+          "oklch(58% 0.121 28.7)",
+          "oklch(69% 0.099 28.7)",
+          "oklch(82% 0.056 28.7)",
+          "oklch(95% 0.018 28.7)"
+        ]
+      },
+      "route-ink": {
+        "role": "primary",
+        "displayName": "Dark coral",
+        "tonalRamp": [
+          "oklch(15% 0.058 29.0)",
+          "oklch(25% 0.100 29.0)",
+          "oklch(36% 0.126 29.0)",
+          "oklch(47% 0.143 29.0)",
+          "oklch(58% 0.154 29.0)",
+          "oklch(69% 0.126 29.0)",
+          "oklch(82% 0.071 29.0)",
+          "oklch(95% 0.023 29.0)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Blue ink",
+        "tonalRamp": [
+          "oklch(15% 0.015 267.7)",
+          "oklch(25% 0.025 267.7)",
+          "oklch(36% 0.032 267.7)",
+          "oklch(47% 0.036 267.7)",
+          "oklch(58% 0.039 267.7)",
+          "oklch(69% 0.032 267.7)",
+          "oklch(82% 0.018 267.7)",
+          "oklch(95% 0.006 267.7)"
+        ]
+      },
+      "sea": {
+        "role": "neutral",
+        "displayName": "Sea",
+        "tonalRamp": [
+          "oklch(15% 0.017 266.2)",
+          "oklch(25% 0.029 266.2)",
+          "oklch(36% 0.036 266.2)",
+          "oklch(47% 0.041 266.2)",
+          "oklch(58% 0.044 266.2)",
+          "oklch(69% 0.036 266.2)",
+          "oklch(82% 0.020 266.2)",
+          "oklch(95% 0.007 266.2)"
+        ]
+      },
+      "land": {
+        "role": "neutral",
+        "displayName": "Land",
+        "tonalRamp": [
+          "oklch(15% 0.019 262.8)",
+          "oklch(25% 0.032 262.8)",
+          "oklch(36% 0.040 262.8)",
+          "oklch(47% 0.045 262.8)",
+          "oklch(58% 0.049 262.8)",
+          "oklch(69% 0.040 262.8)",
+          "oklch(82% 0.022 262.8)",
+          "oklch(95% 0.007 262.8)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "tonalRamp": [
+          "oklch(15% 0.017 265.3)",
+          "oklch(25% 0.028 265.3)",
+          "oklch(36% 0.036 265.3)",
+          "oklch(47% 0.041 265.3)",
+          "oklch(58% 0.044 265.3)",
+          "oklch(69% 0.036 265.3)",
+          "oklch(82% 0.020 265.3)",
+          "oklch(95% 0.007 265.3)"
+        ]
+      },
+      "grid": {
+        "role": "neutral",
+        "displayName": "Grid",
+        "tonalRamp": [
+          "oklch(15% 0.019 262.1)",
+          "oklch(25% 0.033 262.1)",
+          "oklch(36% 0.041 262.1)",
+          "oklch(47% 0.047 262.1)",
+          "oklch(58% 0.051 262.1)",
+          "oklch(69% 0.041 262.1)",
+          "oklch(82% 0.023 262.1)",
+          "oklch(95% 0.008 262.1)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted blue",
+        "tonalRamp": [
+          "oklch(15% 0.015 270.9)",
+          "oklch(25% 0.026 270.9)",
+          "oklch(36% 0.032 270.9)",
+          "oklch(47% 0.037 270.9)",
+          "oklch(58% 0.039 270.9)",
+          "oklch(69% 0.032 270.9)",
+          "oklch(82% 0.018 270.9)",
+          "oklch(95% 0.006 270.9)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "Warm white",
+        "tonalRamp": [
+          "oklch(15% 0.003 17.3)",
+          "oklch(25% 0.005 17.3)",
+          "oklch(36% 0.006 17.3)",
+          "oklch(47% 0.007 17.3)",
+          "oklch(58% 0.007 17.3)",
+          "oklch(69% 0.006 17.3)",
+          "oklch(82% 0.003 17.3)",
+          "oklch(95% 0.001 17.3)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Lilac paper",
+        "tonalRamp": [
+          "oklch(15% 0.002 317.8)",
+          "oklch(25% 0.004 317.8)",
+          "oklch(36% 0.005 317.8)",
+          "oklch(47% 0.006 317.8)",
+          "oklch(58% 0.006 317.8)",
+          "oklch(69% 0.005 317.8)",
+          "oklch(82% 0.003 317.8)",
+          "oklch(95% 0.001 317.8)"
+        ]
+      },
+      "copy": {
+        "role": "neutral",
+        "displayName": "Slate copy",
+        "tonalRamp": [
+          "oklch(15% 0.010 273.4)",
+          "oklch(25% 0.017 273.4)",
+          "oklch(36% 0.021 273.4)",
+          "oklch(47% 0.024 273.4)",
+          "oklch(58% 0.026 273.4)",
+          "oklch(69% 0.021 273.4)",
+          "oklch(82% 0.012 273.4)",
+          "oklch(95% 0.004 273.4)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Lilac rules",
+        "tonalRamp": [
+          "oklch(15% 0.007 304.8)",
+          "oklch(25% 0.011 304.8)",
+          "oklch(36% 0.014 304.8)",
+          "oklch(47% 0.016 304.8)",
+          "oklch(58% 0.017 304.8)",
+          "oklch(69% 0.014 304.8)",
+          "oklch(82% 0.008 304.8)",
+          "oklch(95% 0.003 304.8)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Cover title",
+        "purpose": "Two uppercase lines on the photograph."
+      },
+      "headline": {
+        "displayName": "Story heading",
+        "purpose": "Story introduction and chapter openings."
+      },
+      "title": {
+        "displayName": "Atlas title",
+        "purpose": "Heading above the route map."
+      },
+      "body": {
+        "displayName": "Running text",
+        "purpose": "Long-form prose."
+      },
+      "label": {
+        "displayName": "Metadata",
+        "purpose": "Cover credit and chapter details."
+      }
+    },
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(.19, 1, .22, 1)",
+        "purpose": "Eases route opacity and width changes."
+      },
+      {
+        "name": "route-transition",
+        "value": ".28s",
+        "purpose": "Duration of route emphasis transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stacked-spread",
+        "value": "960px"
+      },
+      {
+        "name": "small-cover-image",
+        "value": "700px"
+      },
+      {
+        "name": "compact",
+        "value": "480px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Masthead",
+      "kind": "nav",
+      "refersTo": "masthead",
+      "description": "Story title, compass and page navigation.",
+      "html": "<header class=\"ds-masthead\">\n    <a class=\"ds-masthead__title\" href=\"#top\" aria-label=\"NorthCape 4000, top of page\">\n      <svg width=\"23\" height=\"23\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M12 1v22M1 12h22M12 4.5l4 7.5-4 7.5-4-7.5 4-7.5Z\" stroke=\"currentColor\" stroke-width=\"1.35\" stroke-linejoin=\"round\"/><path d=\"M12 4.5 16 12h-4V4.5Z\" fill=\"currentColor\"/></svg>\n      NorthCape 4000\n    </a>\n    <nav class=\"ds-masthead__nav\" aria-label=\"Page\">\n      <a href=\"#story\">Story</a>\n      <a href=\"#route\">Route</a>\n    </nav>\n  </header>",
+      "css": ".ds-masthead { min-height: 4rem; display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; padding: .5rem clamp(1.25rem, 3.65vw, 4.5rem); background: var(--color-ink, #11182b); color: var(--color-white, #fff8f8); border-bottom: 1px solid var(--color-border, #38435b); }\n.ds-masthead { font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-masthead__title { display: inline-flex; align-items: center; gap: .72rem; font-weight: 650; font-size: .94rem; text-decoration: none; }\n.ds-masthead__title { color: inherit; }\n.ds-masthead__title svg { color: var(--color-route, #ff806f); flex: none; }\n.ds-masthead__nav { display: flex; gap: clamp(1rem, 3vw, 2.25rem); }\n.ds-masthead__nav a { display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--color-muted, #b6bfda); font-size: .875rem; font-weight: 550; text-decoration: none; }\n.ds-masthead__nav a:hover { color: var(--color-white, #fff8f8); text-decoration: underline; }\n.ds-masthead a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }"
+    },
+    {
+      "name": "Read the Story",
+      "kind": "button",
+      "refersTo": "read-story",
+      "description": "Cover action that jumps to the start of the journal.",
+      "html": "<div class=\"ds-cover-context\"><a class=\"ds-cover__action\" href=\"#story\">Read the story</a></div>",
+      "css": ".ds-cover-context { display: inline-flex; padding: .75rem; background: var(--color-ink, #11182b); }\n.ds-cover__action { display: inline-flex; align-items: center; justify-content: center; min-height: 2.8rem; margin-top: 1.4rem; padding: .6rem 1.05rem; border-radius: 3px; background: var(--color-route, #ff806f); color: var(--color-ink, #11182b); font-weight: 700; font-size: .88rem; text-decoration: none; }\n.ds-cover__action { margin-top: 0; font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-cover__action:hover { background: #ff9c8e; }\n.ds-cover__action:focus-visible { outline: 2px solid var(--color-white, #fff8f8); outline-offset: 4px; }"
+    },
+    {
+      "name": "Route Legend",
+      "kind": "custom",
+      "refersTo": "atlas",
+      "description": "Line styles for the recorded track, official course and ferry crossings.",
+      "html": "<p class=\"ds-atlas__legend\"><span><i></i>GPX track</span><span><i></i>Official course</span><span><i></i>Ferry crossing</span></p>",
+      "css": ".ds-atlas__legend { color: var(--color-muted, #b6bfda); font-size: .76rem; font-weight: 550; line-height: 1.35; }\n.ds-atlas__legend, .ds-atlas__legend span { display: flex; align-items: center; gap: .6rem; }\n.ds-atlas__legend { flex-wrap: wrap; gap: .6rem 1.15rem; }\n.ds-atlas__legend { margin: 0; padding: .85rem 1.5rem 1.1rem; border-top: 1px solid var(--color-border, #38435b); background: var(--color-ink, #11182b); font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-atlas__legend i { width: 1.25rem; border-top: 2px solid var(--color-route, #ff806f); }\n.ds-atlas__legend span:nth-child(2) i { border-top-style: dashed; }\n.ds-atlas__legend span:nth-child(3) i { border-top-style: dashed; border-color: var(--color-muted, #b6bfda); }"
+    },
+    {
+      "name": "Chapter Selector",
+      "kind": "nav",
+      "refersTo": "chapter-tab",
+      "description": "Numbered chapter links beneath the atlas with a current selection.",
+      "html": "<nav class=\"ds-atlas__index\" aria-label=\"Jump to chapter\"><a href=\"#the-alps\" aria-label=\"Chapter 1, Out of the Alps\">01</a><a href=\"#central-europe\" aria-label=\"Chapter 2, Heat, hills and Berlin\" aria-current=\"location\">02</a><a href=\"#sweden\" aria-label=\"Chapter 3, The Swedish stretch\">03</a><a href=\"#finland\" aria-label=\"Chapter 4, Into the Finnish forests\">04</a><a href=\"#arctic-circle\" aria-label=\"Chapter 5, Above the Arctic Circle\">05</a><a href=\"#north-cape\" aria-label=\"Chapter 6, The last road north\">06</a></nav>",
+      "css": ".ds-atlas__index { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .35rem; }\n.ds-atlas__index { padding: .85rem 1.5rem; background: var(--color-ink, #11182b); font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-atlas__index a { display: grid; min-height: 2.75rem; place-items: center; border: 1px solid var(--color-border, #38435b); border-radius: 3px; color: var(--color-white, #fff8f8); font-size: .83rem; font-weight: 650; font-variant-numeric: tabular-nums; text-decoration: none; }\n.ds-atlas__index a:hover { border-color: var(--color-route, #ff806f); }\n.ds-atlas__index a[aria-current=\"location\"] { background: var(--color-route, #ff806f); border-color: var(--color-route, #ff806f); color: var(--color-ink, #11182b); }\n.ds-atlas__index a:focus-visible { outline: 2px solid var(--color-white, #fff8f8); outline-offset: 4px; }"
+    },
+    {
+      "name": "Map Pin",
+      "kind": "custom",
+      "refersTo": "map-pin",
+      "description": "A round chapter anchor with hover, current and keyboard focus states.",
+      "html": "<svg class=\"ds-pin-example\" width=\"240\" height=\"64\" viewBox=\"0 0 240 64\" role=\"group\" aria-label=\"Route chapter pin\"><a class=\"ds-map-pin\" href=\"#central-europe\" aria-label=\"Chapter 2, Heat, hills and Berlin\" transform=\"translate(42 32)\"><circle class=\"ds-map-pin__target\" r=\"22\"/><circle class=\"ds-map-pin__halo\" r=\"17\"/><circle class=\"ds-map-pin__disc\" r=\"11\"/><text class=\"ds-map-pin__number\" text-anchor=\"middle\" y=\".4\" dominant-baseline=\"middle\" aria-hidden=\"true\">02</text><text class=\"ds-map-pin__label\" x=\"19\" y=\"4\" aria-hidden=\"true\">Berlin</text></a></svg>",
+      "css": ".ds-pin-example { display: block; background: #151e34; font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-map-pin  { cursor: pointer; outline: none; }\n.ds-map-pin__target  { fill: transparent; }\n.ds-map-pin__halo  { fill: var(--color-ink, #11182b); stroke: var(--color-route, #ff806f); stroke-width: 1.35; opacity: 0; }\n.ds-map-pin__disc  { fill: var(--color-ink, #11182b); stroke: var(--color-route, #ff806f); stroke-width: 2; }\n.ds-map-pin__number  { fill: var(--color-white, #fff8f8); font-size: 10.5px; font-weight: 700; pointer-events: none; }\n.ds-map-pin__label  { stroke: var(--color-ink, #11182b); stroke-width: 3px; stroke-linejoin: round; paint-order: stroke fill; fill: var(--color-white, #fff8f8); font-size: 13px; font-weight: 650; }\n.ds-map-pin:hover .ds-map-pin__label, .ds-map-pin:focus-visible .ds-map-pin__label  { fill: var(--color-route, #ff806f); }\n.ds-map-pin.is-current .ds-map-pin__disc, .ds-map-pin:hover .ds-map-pin__disc, .ds-map-pin:focus-visible .ds-map-pin__disc  { fill: var(--color-route, #ff806f); }\n.ds-map-pin.is-current .ds-map-pin__number, .ds-map-pin:hover .ds-map-pin__number, .ds-map-pin:focus-visible .ds-map-pin__number  { fill: var(--color-ink, #11182b); }\n.ds-map-pin.is-current .ds-map-pin__halo, .ds-map-pin:focus-visible .ds-map-pin__halo  { opacity: 1; }\n@media (max-width: 480px) { .ds-map-pin__label { font-size: 15px; } }"
+    },
+    {
+      "name": "Chapter Heading",
+      "kind": "custom",
+      "refersTo": "chapter-heading",
+      "description": "A chapter numeral aligned with the title, with dates and location beneath.",
+      "html": "<section class=\"ds-story-chapter\"><header class=\"ds-chapter-head\"><span class=\"ds-chapter-index\" aria-hidden=\"true\">02</span><div><h2>Heat, hills and Berlin</h2><p class=\"ds-chapter-meta\">Days 04–07 <span></span> Berlin, Germany</p></div></header></section>",
+      "css": ".ds-story-chapter { margin-top: clamp(3.5rem, 7vw, 7rem); padding-top: clamp(1.55rem, 3.2vw, 2.5rem); border-top: 1px solid var(--color-rule, #d8d3df); }\n.ds-story-chapter { margin: 0; padding-inline: 1.5rem; background: var(--color-paper, #f4f1f5); color: var(--color-ink, #11182b); }\n.ds-chapter-head { display: flex; align-items: baseline; gap: clamp(.8rem, 2.1vw, 1.6rem); margin-bottom: 1.5rem; }\n.ds-chapter-head h2 { font: 800 clamp(2.6rem, 5vw, 4.4rem)/.95 var(--font-display, \"Barlow Condensed\", \"Arial Narrow\", sans-serif); letter-spacing: -.022em; text-wrap: balance; scroll-margin-top: 1.8rem; }\n.ds-chapter-head h2 { margin: 0; }\n.ds-chapter-index { flex: none; font: 800 clamp(1.55rem, 2.7vw, 2.3rem)/1 var(--font-display, \"Barlow Condensed\", \"Arial Narrow\", sans-serif); color: var(--color-route-ink, #a32f25); font-variant-numeric: tabular-nums; }\n.ds-chapter-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; font-size: .8rem; line-height: 1.35; font-weight: 550; font-variant-numeric: tabular-nums; }\n.ds-chapter-meta { margin-top: .65rem; color: var(--color-copy, #3f4352); }\n.ds-chapter-meta { margin-bottom: 0; font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-chapter-meta span { width: 3px; height: 3px; border-radius: 50%; background: currentColor; }"
+    },
+    {
+      "name": "Ride Facts",
+      "kind": "custom",
+      "refersTo": "ride-facts",
+      "description": "The course distance, days on the road and ride year.",
+      "html": "<dl class=\"ds-ride-facts\">\n        <div><dt>Course</dt><dd>4,000 km</dd></div>\n        <div><dt>Time on the road</dt><dd>22 days</dd></div>\n        <div><dt>Year</dt><dd>2022</dd></div>\n      </dl>",
+      "css": ".ds-ride-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--color-rule, #d8d3df); padding-inline: clamp(1.5rem, 5.55vw, 6.5rem); }\n.ds-ride-facts { margin: 0; background: var(--color-paper, #f4f1f5); color: var(--color-ink, #11182b); font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-ride-facts div { display: flex; flex-direction: column-reverse; justify-content: center; gap: .24rem; padding-block: 1.12rem 1.05rem; }\n.ds-ride-facts div + div { padding-inline-start: clamp(.8rem, 2.3vw, 2rem); border-inline-start: 1px solid var(--color-rule, #d8d3df); }\n.ds-ride-facts dd { font: 800 clamp(1.5rem, 3.05vw, 2.4rem)/.96 var(--font-display, \"Barlow Condensed\", \"Arial Narrow\", sans-serif); }\n.ds-ride-facts dd { margin: 0; }\n.ds-ride-facts dt { color: var(--color-copy, #3f4352); font-size: .78rem; line-height: 1.2; font-weight: 560; }"
+    },
+    {
+      "name": "Mobile Route Bar",
+      "kind": "button",
+      "refersTo": "route-return",
+      "description": "The full-width return link with the active chapter number.",
+      "html": "<a class=\"ds-mobile-route\" href=\"#route\">\n    <svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" fill=\"none\" aria-hidden=\"true\"><path d=\"m5 15 4-5 3 1 3-6\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"5\" cy=\"15\" r=\"2\" fill=\"#11182b\" stroke=\"currentColor\" stroke-width=\"1.5\"/><circle cx=\"15\" cy=\"5\" r=\"2\" fill=\"#11182b\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg>\n    <span>Route · 02</span>\n  </a>",
+      "css": ".ds-mobile-route { display: flex; align-items: center; justify-content: center; gap: .55rem; min-height: calc(3rem + env(safe-area-inset-bottom)); padding: .5rem 1rem calc(.5rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border, #38435b); background: var(--color-ink, #11182b); color: var(--color-white, #fff8f8); text-decoration: none; font-size: .875rem; font-weight: 650; font-family: var(--font-ui, \"Work Sans\", system-ui, sans-serif); }\n.ds-mobile-route svg { color: var(--color-route, #ff806f); }\n.ds-mobile-route:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "A ride journal beside an atlas",
+    "overview": "Photographs from the ride introduce the terrain. The atlas follows the same journey through numbered stops, and the journal gives the story room to unfold in serif prose. Cool ink frames navigation and geography, lilac paper carries the text, and coral draws the eye to the route and its controls.",
+    "keyCharacteristics": [
+      "Photographs with location and date captions.",
+      "Condensed headings, serif prose and sans-serif controls.",
+      "Chapter numbers shared by the map, chapter navigation and article."
+    ],
+    "rules": [
+      {
+        "name": "The Route Color Rule",
+        "body": "Use coral for the route and its corresponding chapter states. Use the darker coral for chapter numerals on paper.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do keep route styles distinct in the geometry and the legend.",
+      "Do preserve visible focus on chapter links and map pins.",
+      "Do keep photograph captions and dates directly below their images."
+    ],
+    "donts": []
+  }
+}
