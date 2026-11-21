@@ -4,14 +4,14 @@
 
   interface Props {
     chapters: RouteChapter[];
-    activeId: string | null;
+    activeChapter: RouteChapter | undefined;
     element: HTMLElement | undefined;
     heading: HTMLHeadingElement | undefined;
   }
 
   // The story page uses the atlas bounds and moves focus to its heading.
-  let { chapters, activeId, element = $bindable(), heading = $bindable() }: Props = $props();
-  const current = $derived(chapters.find((chapter) => chapter.id === activeId));
+  let { chapters, activeChapter, element = $bindable(), heading = $bindable() }: Props = $props();
+  const activeId = $derived(activeChapter?.id ?? null);
 </script>
 
 <aside class="atlas" id="route" aria-labelledby="route-title" tabindex="-1" bind:this={element}>
@@ -33,11 +33,10 @@
             title={chapter.title}
             aria-label={`Chapter ${index + 1}, ${chapter.title}`}
             aria-current={activeId === chapter.id ? 'location' : undefined}
-            class:is-current={activeId === chapter.id}
           >{chapter.number}</a>
         {/each}
       </nav>
-      <p class="atlas__current" aria-hidden="true">{current ? `Chapter ${current.number} · ${current.title}` : 'Rovereto to North Cape'}</p>
+      <p class="atlas__current" aria-hidden="true">{activeChapter ? `Chapter ${activeChapter.number} · ${activeChapter.title}` : 'Rovereto to North Cape'}</p>
     </div>
   </div>
 </aside>
@@ -112,7 +111,7 @@
     text-decoration: none;
   }
   .atlas__index a:hover { border-color: var(--color-route); }
-  .atlas__index a.is-current {
+  .atlas__index a[aria-current] {
     background: var(--color-route);
     border-color: var(--color-route);
     color: var(--color-ink);

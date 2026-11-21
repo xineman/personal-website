@@ -17,7 +17,7 @@
   const photosByKey: Readonly<Record<string, Photo | undefined>> = article.images;
   const number = (value: number) => String(value).padStart(2, '0');
   const chapters = article.chapters.map((chapter, index) => ({ ...chapter, number: number(index + 1) }));
-  const current = $derived(chapters.find((chapter) => chapter.id === activeId));
+  const activeChapter = $derived(chapters.find((chapter) => chapter.id === activeId));
 
   function getPhoto(key: string) {
     const photo = photosByKey[key];
@@ -113,7 +113,7 @@
     <p class="cover__credit">Northern Norway <span></span> 11 Aug 2022</p>
   </section>
 
-  <RouteAtlas {chapters} {activeId} bind:element={atlas} bind:heading={routeHeading} />
+  <RouteAtlas {chapters} {activeChapter} bind:element={atlas} bind:heading={routeHeading} />
 
   <article class="journal" aria-labelledby="story">
     <dl class="ride-facts">
@@ -152,7 +152,7 @@
 </main>
 <a class="mobile-route" class:is-visible={pastAtlas} href="#route" onclick={(event) => focusRoute(event, true)}>
   <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 15 4-5 3 1 3-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="15" r="2" fill="#11182b" stroke="currentColor" stroke-width="1.5"/><circle cx="15" cy="5" r="2" fill="#11182b" stroke="currentColor" stroke-width="1.5"/></svg>
-  <span>{current ? `Route · ${current.number}` : 'Route'}</span>
+  <span>{activeChapter ? `Route · ${activeChapter.number}` : 'Route'}</span>
 </a>
 
 <style>

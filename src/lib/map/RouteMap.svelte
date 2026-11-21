@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { asset } from '$app/paths';
-  import type { FitBoundsOptions, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from 'maplibre-gl';
+  import type { LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from 'maplibre-gl';
   import type { RouteChapter, RouteData } from './route-data.js';
   import { atlasStyle, routeEmphasis, routeHitLayer, routeLayers } from './map-style.js';
 
@@ -18,12 +18,13 @@
   const chapterBounds = new Map<string, LngLatBounds>();
   let cameraBounds: LngLatBounds | undefined;
   let lastChapterId: string | null = null;
-  let markers: { id: string; marker: Marker }[] = [];
-  let ready = $state(false);
-  let unavailable = $state(false);
+  const markers: { id: string; marker: Marker }[] = [];
+  let status = $state<'loading' | 'ready' | 'unavailable'>('loading');
+  const ready = $derived(status === 'ready');
   let basemapUnavailable = $state(false);
   let hoveredId = $state<string | null>(null);
   let zoom = $state(0);
+  const minZoom = 1;
   const maxZoom = 16;
 
   const overviewPadding = { top: 29, right: 60, bottom: 48, left: 60 };
@@ -32,14 +33,13 @@
   function fitMap(bounds: LngLatBounds, animate: boolean) {
     cameraBounds = bounds;
     const overview = bounds === routeBounds;
-    const options: FitBoundsOptions = {
+    map?.fitBounds(bounds, {
       padding: overview ? overviewPadding : chapterPadding,
       maxZoom: overview ? maxZoom : 8,
       linear: true,
       animate,
       duration: 450
-    };
-    map?.fitBounds(bounds, options);
+    });
   }
 
   function changeZoom(direction: number) {
@@ -70,9 +70,11 @@
   // Sync route emphasis and pin state with the active and hovered chapters.
   $effect(() => {
     if (!ready || !map) return;
+    const width = routeEmphasis(activeId, hoveredId, 4, 2.6);
+    const opacity = routeEmphasis(activeId, hoveredId, 1, activeId ? 0.62 : 1);
     for (const layer of routeLayers) {
-      map.setPaintProperty(layer, 'line-width', routeEmphasis(activeId, hoveredId, 4, 2.6));
-      map.setPaintProperty(layer, 'line-opacity', routeEmphasis(activeId, hoveredId, 1, activeId ? 0.62 : 1));
+      map.setPaintProperty(layer, 'line-width', width);
+      map.setPaintProperty(layer, 'line-opacity', opacity);
     }
     for (const { id, marker } of markers) {
       const link = marker.getElement();
@@ -89,13 +91,14 @@
     async function start() {
       try {
         const [lib, worker, route] = await Promise.all([
+          // Select exports at the import so the bundler can drop unused MapLibre code.
           import('maplibre-gl').then(({ Map, LngLatBounds, Marker, setWorkerUrl }) => ({
             Map, LngLatBounds, Marker, setWorkerUrl
           })),
           import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'),
-          fetch(asset('route.geojson'), { signal: controller.signal }).then(async (response) => {
+          fetch(asset('route.geojson'), { signal: controller.signal }).then((response) => {
             if (!response.ok) throw new Error('Route GeoJSON request failed');
-            return await response.json() as RouteData;
+            return response.json() as Promise<RouteData>;
           })
         ]);
         if (controller.signal.aborted) return;
@@ -128,7 +131,7 @@
           pitchWithRotate: false,
           maxPitch: 0,
           maxZoom,
-          minZoom: 1,
+          minZoom,
           renderWorldCopies: false
         });
 
@@ -136,11 +139,9 @@
         instance.touchZoomRotate.disableRotation();
         // The route can still render if basemap tiles fail.
         instance.on('error', (event) => {
-          if ('sourceId' in event && event.sourceId === 'basemap') basemapUnavailable = true;
-          if ('sourceId' in event && event.sourceId === 'route') {
-            ready = false;
-            unavailable = true;
-          }
+          if (!('sourceId' in event)) return;
+          if (event.sourceId === 'basemap') basemapUnavailable = true;
+          if (event.sourceId === 'route') status = 'unavailable';
         });
 
         const chapterAt = (event: MapMouseEvent) => {
@@ -194,7 +195,7 @@
           });
 
           updateMarkers(instance);
-          ready = !unavailable;
+          if (status === 'loading') status = 'ready';
         });
 
         // Preserve manual map positions on resize and refit automatic views.
@@ -209,7 +210,7 @@
         });
         resize.observe(host);
       } catch {
-        if (!controller.signal.aborted) unavailable = true;
+        if (!controller.signal.aborted) status = 'unavailable';
       }
     }
 
@@ -249,7 +250,7 @@
       <button type="button" aria-label="Zoom in" title="Zoom in" onclick={() => changeZoom(1)} disabled={zoom >= maxZoom}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <button type="button" aria-label="Zoom out" title="Zoom out" onclick={() => changeZoom(-1)} disabled={zoom <= 1}>
+      <button type="button" aria-label="Zoom out" title="Zoom out" onclick={() => changeZoom(-1)} disabled={zoom <= minZoom}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
       </button>
       <button type="button" aria-label="Fit the whole route" title="Fit the whole route" onclick={() => fitMap(routeBounds, true)}>
@@ -269,7 +270,7 @@
     </div>
   {:else}
     <p class="map-status map-status--pending" role="status">
-      {unavailable ? 'The map couldn’t load. Use the chapter links below.' : 'Loading route map…'}
+      {status === 'unavailable' ? 'The map couldn’t load. Use the chapter links below.' : 'Loading route map…'}
     </p>
     <noscript><p class="map-status">Use the chapter links below to follow the route.</p></noscript>
   {/if}
