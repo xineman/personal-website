@@ -72,6 +72,8 @@ h1, h2, p, figure { margin: 0; }
   align-self: start;
   width: clamp(21rem, 34vw, 33rem);
   margin: clamp(4rem, 11vh, 9rem) var(--edge) max(22vh, 9rem);
+}
+.cover > .paper-surface {
   padding: clamp(1.5rem, 3vw, 3rem);
   background: var(--color-route);
 }
@@ -89,6 +91,8 @@ h1, h2, p, figure { margin: 0; }
 .story-panel {
   width: min(53%, 45rem);
   margin-bottom: clamp(5rem, 22vh, 13rem);
+}
+.story-panel > .paper-surface {
   padding: clamp(1.5rem, 3.25vw, 3rem);
   background: var(--color-paper);
   pointer-events: auto;
@@ -106,7 +110,40 @@ h1, h2, p, figure { margin: 0; }
 .prose { font: clamp(1.125rem, 1.38vw, 1.25rem)/1.62 var(--font-prose); color: var(--color-copy); overflow-wrap: break-word; }
 .prose + .prose { margin-top: 1.1em; }
 .reading-hint { margin-block: .5rem 1.1rem; font: 650 .9rem/1.5 var(--font-ui); }
-.journey.is-exploring :is(.cover, .journal) { visibility: hidden; }
+
+.paper-surface {
+  transition: translate 280ms cubic-bezier(.22, 1, .36, 1),
+    opacity 280ms cubic-bezier(.22, 1, .36, 1) var(--paper-return-head-start, 0ms);
+}
+.paper-content { transition: opacity 170ms ease-out 35ms; }
+/* Keep the outgoing paper above the full map while it clears. */
+.journey.is-paper-hidden :is(.cover, .journal) { z-index: 5; }
+.journey.is-paper-hidden .paper-surface {
+  translate: var(--paper-offset, var(--paper-exit, -24px));
+  opacity: 0;
+  visibility: hidden;
+  transition: translate 180ms cubic-bezier(.4, 0, .72, 1),
+    opacity 130ms ease-in 50ms, visibility 180ms;
+}
+.journey.is-positioning-paper .paper-surface { transition: none; }
+.journey.is-paper-hidden .paper-content {
+  opacity: 0;
+  transition: opacity 65ms ease-out;
+}
+
+@media (min-width: 1181px) {
+  .story-panel--right { --paper-exit: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-surface { transition: opacity 120ms ease-out var(--paper-return-head-start, 0ms); }
+  .paper-content { transition: opacity 95ms ease-out 25ms; }
+  .journey.is-paper-hidden .paper-surface {
+    translate: none;
+    transition: opacity 80ms ease-out 40ms, visibility 120ms;
+  }
+  .journey.is-paper-hidden .paper-content { transition-duration: 40ms; }
+}
 
 .photo-strip {
   --photo-edge: clamp(.65rem, 2.65vw, 2.75rem);
@@ -163,8 +200,11 @@ h1, h2, p, figure { margin: 0; }
 }
 
 @media (max-width: 1060px) {
-  .journey { display: block; }
-  .cover { width: 100%; margin: 0; padding: 1.65rem var(--edge) 1.25rem; }
+  .journey { display: block; overflow-x: clip; --paper-exit: -12px; --paper-return-head-start: -28ms; }
+  .journey:not(.is-paper-hidden) .paper-content { transition: none; }
+  .journey.is-paper-hidden .journal { clip-path: inset(var(--paper-dock-inset) 0 0); }
+  .cover { width: 100%; margin: 0; }
+  .cover > .paper-surface { padding: 1.65rem var(--edge) 1.25rem; }
   .cover h1 { font-size: clamp(3.65rem, 10vw, 6rem); }
   .cover h1 br { display: none; }
   .cover p { margin-top: .75rem; }
@@ -173,9 +213,9 @@ h1, h2, p, figure { margin: 0; }
   .story-panel, .story-panel:last-child {
     width: min(100%, 43rem);
     margin: 0 auto;
-    padding: 2.3rem var(--edge);
   }
-  .story-panel + .story-panel { border-top: 1px solid var(--color-rule); }
+  .story-panel > .paper-surface { padding: 2.3rem var(--edge); }
+  .story-panel + .story-panel > .paper-surface { border-top: 1px solid var(--color-rule); }
   .chapter-head h2 { scroll-margin-top: calc(var(--dock-height) + 1rem); }
 }
 

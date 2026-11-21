@@ -1,6 +1,6 @@
 <script lang="ts">
   import RouteMap from './RouteMap.svelte';
-  import type { MapFraming, RouteChapter } from './route-data.js';
+  import type { MapFraming, RouteChapter, ScreenPoint } from './route-data.js';
   import type { ReadingPosition } from './route-progress.js';
 
   interface Props {
@@ -9,13 +9,14 @@
     framing: MapFraming | undefined;
     scrollPosition: number;
     exploring: boolean;
-    onToggle: () => void;
+    onExplore: (open: boolean, drag?: ScreenPoint) => void;
+    onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
     element?: HTMLElement;
     toggle?: HTMLButtonElement;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, onToggle, onChapter, element = $bindable(), toggle = $bindable() }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, onExplore, onReturnCamera, onChapter, element = $bindable(), toggle = $bindable() }: Props = $props();
   const active = $derived(chapters[Math.min(position.chapter, chapters.length - 1)]);
   const place = $derived(position.percent === 100 ? 'North Cape reached' : active?.title ?? 'Rovereto to North Cape');
   const onRight = $derived(position.chapter % 2 === 1 || position.chapter >= chapters.length);
@@ -25,7 +26,7 @@
 <aside class="atlas" class:exploring class:panel-right={onRight} id="route" aria-label="Route" bind:this={element}>
   <section class="map-sheet" role={exploring ? 'dialog' : undefined} aria-modal={exploring ? true : undefined}
     aria-label="Interactive map of the ride" aria-describedby={exploring ? 'map-gesture' : undefined}>
-    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {onChapter} bind:ready />
+    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {onExplore} {onReturnCamera} {onChapter} bind:ready />
 
     {#if ready}
       <div class="reading-status">
@@ -38,7 +39,7 @@
         <span>N</span>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 6 20l6-4 6 4-6-16Zm0 1v11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
       </div>
-      <button class="explore" type="button" onclick={onToggle} aria-expanded={exploring} bind:this={toggle}>
+      <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
         {exploring ? 'Back to story' : 'Explore map'}
       </button>
       {#if exploring}

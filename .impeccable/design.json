@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-20T19:56:42Z",
+  "generatedAt": "2026-11-21T21:39:27Z",
   "title": "Design System for NorthCape 4000",
   "extensions": {
     "colorMeta": {
@@ -206,29 +206,25 @@
       },
       "label": {
         "displayName": "Metadata",
-        "purpose": "Cover credit and chapter details."
+        "purpose": "Navigation, chapter pins, captions and chapter details."
       }
     },
     "motion": [
       {
-        "name": "ease-out",
-        "value": "cubic-bezier(.19, 1, .22, 1)",
-        "purpose": "Eases route opacity and width changes."
+        "name": "map-mode-ease-out",
+        "value": "cubic-bezier(0.33333, 1, 0.66667, 1)",
+        "purpose": "Cubic ease-out for camera reframing between the story and map exploration."
       },
       {
-        "name": "route-transition",
-        "value": ".28s",
-        "purpose": "Duration of route emphasis transitions."
+        "name": "map-camera-transition",
+        "value": "280ms",
+        "purpose": "Camera reframing duration. With reduced motion, the camera changes immediately."
       }
     ],
     "breakpoints": [
       {
         "name": "stacked-spread",
         "value": "960px"
-      },
-      {
-        "name": "small-cover-image",
-        "value": "700px"
       },
       {
         "name": "compact",
