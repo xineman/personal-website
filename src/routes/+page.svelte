@@ -1,24 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import RouteMap from '#lib/RouteMap.svelte';
+  import RouteAtlas from '#lib/map/RouteAtlas.svelte';
   import article from '../../content/article.json';
-  import type { PageProps } from './$types';
 
   type PhotoPlacement = { after: number; images: string[] };
   type Photo = (typeof article.images)[keyof typeof article.images];
 
-  let { data }: PageProps = $props();
   let activeId = $state<string | null>(null);
   let pastAtlas = $state(false);
-  let atlas: HTMLElement;
-  let routeHeading: HTMLHeadingElement;
+  let atlas = $state<HTMLElement>();
+  let routeHeading = $state<HTMLHeadingElement>();
   let sections: HTMLElement[] = [];
   let frame: number | undefined;
+  let routeReturnChapter: string | null = null;
 
   const photosByKey: Readonly<Record<string, Photo | undefined>> = article.images;
   const number = (value: number) => String(value).padStart(2, '0');
   const chapters = article.chapters.map((chapter, index) => ({ ...chapter, number: number(index + 1) }));
-  const current = $derived(chapters.find((chapter) => chapter.id === activeId));
+  const activeChapter = $derived(chapters.find((chapter) => chapter.id === activeId));
 
   function getPhoto(key: string) {
     const photo = photosByKey[key];
@@ -27,19 +26,28 @@
   }
 
   function updateReadingPosition() {
+    // Use the last chapter to cross a reading line near the top of the viewport.
     const line = Math.min(window.innerHeight * 0.25, 150);
-    activeId = sections.findLast((section) => section.getBoundingClientRect().top <= line)?.dataset.chapter ?? null;
-    pastAtlas = atlas.getBoundingClientRect().bottom < 0;
+    const readingChapter = sections.findLast((section) => section.getBoundingClientRect().top <= line)?.dataset.chapter;
+    const atlasRect = atlas?.getBoundingClientRect();
+    pastAtlas = !!atlasRect && atlasRect.bottom < 0;
+    if (readingChapter || !atlasRect || pastAtlas || atlasRect.top >= window.innerHeight) {
+      routeReturnChapter = null;
+    }
+    activeId = readingChapter ?? routeReturnChapter;
     frame = undefined;
   }
 
   function scheduleUpdate() {
+    // Measure the reading position at most once per animation frame.
     frame ??= requestAnimationFrame(updateReadingPosition);
   }
 
-  function focusRoute(event: MouseEvent) {
+  function focusRoute(event: MouseEvent, preserveChapter = false) {
     if (event.button || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    requestAnimationFrame(() => routeHeading.focus({ preventScroll: true }));
+    // Carry the current chapter back to the atlas when using the mobile shortcut.
+    if (preserveChapter) routeReturnChapter = activeId;
+    requestAnimationFrame(() => routeHeading?.focus({ preventScroll: true }));
   }
 
   onMount(() => {
@@ -105,35 +113,7 @@
     <p class="cover__credit">Northern Norway <span></span> 11 Aug 2022</p>
   </section>
 
-  <aside class="atlas" id="route" aria-labelledby="route-title" tabindex="-1" bind:this={atlas}>
-    <div class="atlas__sticky" class:has-current={current}>
-      <header class="atlas__header">
-        <div>
-          <h2 id="route-title" tabindex="-1" bind:this={routeHeading}>Follow the route</h2>
-          <p>Pick a stop or route segment to jump to its chapter.</p>
-        </div>
-        <svg class="atlas__north" viewBox="0 0 28 42" width="22" height="34" fill="none" aria-hidden="true"><path d="M14 16 5 37l9-4.3 9 4.3L14 16Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M14 16 5 37l9-4.3V16Z" fill="currentColor"/><path d="M10.5 11V3l7 8V3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-      </header>
-      <div class="atlas__canvas">
-        <RouteMap map={data.map} {chapters} {activeId} />
-      </div>
-      <div class="atlas__footer">
-        <p class="atlas__legend"><span><i></i>GPX track</span><span><i></i>Official course</span><span><i></i>Ferry crossing</span></p>
-        <nav class="atlas__index" aria-label="Jump to chapter">
-          {#each chapters as chapter, index (chapter.id)}
-            <a
-              href={'#' + chapter.id}
-              title={chapter.title}
-              aria-label={`Chapter ${index + 1}, ${chapter.title}`}
-              aria-current={activeId === chapter.id ? 'location' : undefined}
-              class:is-current={activeId === chapter.id}
-            >{chapter.number}</a>
-          {/each}
-        </nav>
-        <p class="atlas__current" aria-hidden="true">{current ? `Chapter ${current.number} · ${current.title}` : 'Six chapters · Italy to Norway'}</p>
-      </div>
-    </div>
-  </aside>
+  <RouteAtlas {chapters} {activeChapter} bind:element={atlas} bind:heading={routeHeading} />
 
   <article class="journal" aria-labelledby="story">
     <dl class="ride-facts">
@@ -166,12 +146,37 @@
       </section>
       <footer class="journal__footer">
         <a href="#top">Back to the start</a>
-        <p>Map geography from <a href="https://www.naturalearthdata.com/">Natural Earth</a>.</p>
       </footer>
     </div>
   </article>
 </main>
-<a class="mobile-route" class:is-visible={pastAtlas} href="#route" onclick={focusRoute}>
+<a class="mobile-route" class:is-visible={pastAtlas} href="#route" onclick={(event) => focusRoute(event, true)}>
   <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 15 4-5 3 1 3-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="15" r="2" fill="#11182b" stroke="currentColor" stroke-width="1.5"/><circle cx="15" cy="5" r="2" fill="#11182b" stroke="currentColor" stroke-width="1.5"/></svg>
-  <span>{current ? `Route · ${current.number}` : 'Route'}</span>
+  <span>{activeChapter ? `Route · ${activeChapter.number}` : 'Route'}</span>
 </a>
+
+<style>
+  .mobile-route { display: none; }
+
+  @media screen and (max-width: 960px) {
+    .mobile-route.is-visible {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .55rem;
+      position: fixed;
+      z-index: 2;
+      inset: auto 0 0;
+      min-height: calc(3rem + env(safe-area-inset-bottom));
+      padding: .5rem 1rem calc(.5rem + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--color-border);
+      background: var(--color-ink);
+      color: var(--color-white);
+      text-decoration: none;
+      font-size: .875rem;
+      font-weight: 650;
+    }
+    .mobile-route svg { color: var(--color-route); }
+    .mobile-route:focus-visible { outline-offset: -.3rem; }
+  }
+</style>
