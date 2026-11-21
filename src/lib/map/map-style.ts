@@ -154,6 +154,7 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
         filter: ['==', ['get', 'kind'], 'official'],
         paint: { 'line-color': routeColor, 'line-width': 2.6, 'line-dasharray': [2, 1.6] }
       },
+      // A wider invisible line makes route segments easier to select.
       {
         id: routeHitLayer, type: 'line', source: 'route',
         filter: ['!=', ['get', 'kind'], 'ferry'],

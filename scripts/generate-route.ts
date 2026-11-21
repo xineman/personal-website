@@ -58,6 +58,7 @@ async function readGpx(file: string) {
   let points: Coordinates[] = [];
   const parser = new SaxesParser();
 
+  // GPX files can contain recorded track segments or planned routes.
   parser.on('opentag', ({ name, attributes }) => {
     const tag = name.split(':').at(-1);
     if (tag === 'trkseg' || tag === 'rte') points = [];
@@ -110,6 +111,7 @@ async function buildRoute(): Promise<RouteData> {
     }
   }
 
+  // Draw ferry crossings between the end of one day's track and the next day's start.
   for (const day of [7, 12]) {
     const departure = days.get(day)?.at(-1)?.points.at(-1);
     const arrival = days.get(day + 1)?.[0]?.points[0];
@@ -126,6 +128,7 @@ async function buildRoute(): Promise<RouteData> {
 
 const route = await buildRoute();
 const output = new URL('../static/route.geojson', import.meta.url);
+// Write the complete file before replacing the asset.
 const temporary = new URL(`../.route-${randomUUID()}.geojson`, import.meta.url);
 
 try {

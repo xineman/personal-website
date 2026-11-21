@@ -51,12 +51,14 @@
   function updateMarkers(instance: MapLibreMap) {
     zoom = instance.getZoom();
     const { clientWidth, clientHeight } = host;
+    // Keep offscreen pins out of the keyboard tab order.
     for (const { marker } of markers) {
       const { x, y } = instance.project(marker.getLngLat());
       marker.getElement().inert = x < 0 || x > clientWidth || y < 0 || y > clientHeight;
     }
   }
 
+  // Follow the reading position, animating only while the map is visible.
   $effect(() => {
     if (!ready || activeId === lastChapterId) return;
     lastChapterId = activeId;
@@ -65,6 +67,7 @@
     fitMap(bounds, bottom > 0 && top < window.innerHeight);
   });
 
+  // Sync route emphasis and pin state with the active and hovered chapters.
   $effect(() => {
     if (!ready || !map) return;
     for (const layer of routeLayers) {
@@ -98,6 +101,7 @@
         if (controller.signal.aborted) return;
 
         lib.setWorkerUrl(worker.default);
+        // Frame each chapter using both its pin and its route segments.
         routeBounds = new lib.LngLatBounds();
         cameraBounds = routeBounds;
         for (const { id, coordinates: [lon, lat] } of chapters) {
@@ -130,6 +134,7 @@
 
         instance.keyboard.disableRotation();
         instance.touchZoomRotate.disableRotation();
+        // The route can still render if basemap tiles fail.
         instance.on('error', (event) => {
           if ('sourceId' in event && event.sourceId === 'basemap') basemapUnavailable = true;
           if ('sourceId' in event && event.sourceId === 'route') {
@@ -139,6 +144,7 @@
         });
 
         const chapterAt = (event: MapMouseEvent) => {
+          // Let pin links handle their own navigation.
           if ((event.originalEvent.target as Element).closest('a') || !instance.getLayer(routeHitLayer)) return null;
           return instance.queryRenderedFeatures(event.point, { layers: [routeHitLayer] })[0]?.properties.chapterId ?? null;
         };
@@ -191,6 +197,7 @@
           ready = !unavailable;
         });
 
+        // Preserve manual map positions on resize and refit automatic views.
         instance.on('movestart', (event) => {
           if (event.originalEvent) cameraBounds = undefined;
         });
@@ -206,6 +213,7 @@
       }
     }
 
+    // Load the map code and route data as the atlas approaches the viewport.
     if ('IntersectionObserver' in window) {
       observer = new IntersectionObserver(([entry]) => {
         if (!entry.isIntersecting) return;

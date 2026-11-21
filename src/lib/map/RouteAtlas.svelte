@@ -9,6 +9,7 @@
     heading: HTMLHeadingElement | undefined;
   }
 
+  // The story page uses the atlas bounds and moves focus to its heading.
   let { chapters, activeId, element = $bindable(), heading = $bindable() }: Props = $props();
   const current = $derived(chapters.find((chapter) => chapter.id === activeId));
 </script>

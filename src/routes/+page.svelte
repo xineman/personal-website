@@ -26,6 +26,7 @@
   }
 
   function updateReadingPosition() {
+    // Use the last chapter to cross a reading line near the top of the viewport.
     const line = Math.min(window.innerHeight * 0.25, 150);
     const readingChapter = sections.findLast((section) => section.getBoundingClientRect().top <= line)?.dataset.chapter;
     const atlasRect = atlas?.getBoundingClientRect();
@@ -38,11 +39,13 @@
   }
 
   function scheduleUpdate() {
+    // Measure the reading position at most once per animation frame.
     frame ??= requestAnimationFrame(updateReadingPosition);
   }
 
   function focusRoute(event: MouseEvent, preserveChapter = false) {
     if (event.button || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    // Carry the current chapter back to the atlas when using the mobile shortcut.
     if (preserveChapter) routeReturnChapter = activeId;
     requestAnimationFrame(() => routeHeading?.focus({ preventScroll: true }));
   }
