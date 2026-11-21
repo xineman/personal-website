@@ -1,16 +1,18 @@
 # NorthCape 4000
 
-A cycling journal and interactive GPX atlas for the 2022 NorthCape 4000. The site uses SvelteKit's minimal TypeScript scaffold and static adapter.
+A cycling journal and interactive GPX atlas for the 2022 NorthCape 4000. SvelteKit prerenders the journal and serves the route as a static GeoJSON file.
 
 ## Development
 
-Run these commands from the project root with Node.js 24 and pnpm 12.21.0.
+Run these commands from the project root with Node.js 24 and Bun.
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm dev
+bun install --frozen-lockfile
+bun run dev
 ```
 
-Run `pnpm check` to type-check the application. Run `pnpm build` to prerender the site into `build/`, then use `pnpm preview` to preview the production build.
+Run `bun run check` to type-check the application. Run `bun run build` to build and prerender the site, then use `bun run preview` to preview the production build.
 
-The journal and basemap live in `content/`. The route is built from the GPX tracks in `data/northcape-4000/gpx/`, and the published photos and fonts live in `static/assets/`.
+The journal lives in `content/`. The checked-in `static/route.geojson` lets the dev server serve the route immediately. Run `bun run generate:route` after changing the GPX tracks in `data/northcape-4000/gpx/` or the day ranges in `content/article.json`, and commit the updated GeoJSON alongside those changes. The production build regenerates it automatically.
+
+MapLibre loads `/route.geojson` when the atlas approaches the viewport and fetches the basemap tiles and map glyphs from OpenFreeMap. The published photos and article fonts live in `static/assets/`.

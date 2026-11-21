@@ -117,7 +117,7 @@ Photographs from the ride introduce the terrain. The atlas follows the same jour
 ### Neutral
 
 - **Blue ink** anchors the masthead and atlas and supplies dark text on paper and coral.
-- **Sea, land, border and grid** distinguish the map background, geography, outlines and reference lines.
+- **Sea, land and border** distinguish the map background, geography and outlines.
 - **Warm white** carries titles and pin labels on ink. **Muted blue** carries supporting atlas text, region labels and ferry lines.
 - **Lilac paper** carries the journal. **Slate copy** colors prose and captions, with **lilac rules** marking chapter boundaries and dividing ride facts.
 
@@ -127,7 +127,7 @@ Photographs from the ride introduce the terrain. The atlas follows the same jour
 
 - **Display and headings.** Barlow Condensed at weight 800. The cover breaks into two uppercase lines. Story headings use balanced wrapping, and the atlas heading uses a smaller title size.
 - **Running text.** Georgia at 1.125rem with a 1.68 line height and a maximum of 69ch. The first paragraph of the introduction is larger and uses blue ink. The running size drops to 1.05rem at widths of 480px and below.
-- **Controls and supporting text.** Work Sans carries navigation, map labels and captions. Chapter numbers, controls and dates use tabular numerals where they align or change.
+- **Controls and supporting text.** Work Sans carries navigation, chapter pins and captions. MapLibre uses Noto Sans for geographic labels. Chapter numbers, controls and dates use tabular numerals where they align or change.
 
 ## Layout
 
@@ -151,7 +151,7 @@ The masthead pairs a coral compass and the story title with the Story and Route 
 
 ### Atlas and chapter selector
 
-The route uses a solid coral stroke for the recorded GPX track, a dashed coral stroke for the official course and a dashed muted-blue stroke for ferries. Pins and the six numbered links jump to chapter headings. The active chapter fills its pin and link with coral and strengthens the matching route segment. Hovering over a pin or a route segment also emphasizes the segment, and focused pins show a surrounding ring. The route hit areas widen for coarse pointers, and pin labels grow on narrow screens. With reduced motion enabled, route emphasis changes immediately.
+The route uses a solid coral stroke for the recorded GPX track, a dashed coral stroke for the official course and a dashed muted-blue stroke for ferries. MapLibre renders the route on a north-up vector basemap. Readers can pan and zoom to inspect roads and places, then use Full route to return to the overview. On touch screens, two fingers move the map so a single finger can scroll the article. Pins, route segments and the six numbered links jump to chapter headings. As the reader enters a chapter, the atlas frames its GPX tracks and marks its pin and link in coral. Manual exploration and Full route stay in effect until the reading position changes chapters. The mobile Route link opens the atlas at the reader’s current chapter, and reduced-motion settings make camera changes immediate. Hovering a pin or route segment also emphasizes the segment, and focused pins have a visible ring.
 
 ### Journal chapters and photographs
 
