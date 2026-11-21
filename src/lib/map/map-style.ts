@@ -1,27 +1,49 @@
 import type { MultiPoint } from 'geojson';
-import type { DataDrivenPropertyValueSpecification, ExpressionSpecification, StyleSpecification, SymbolLayerSpecification } from 'maplibre-gl';
+import type { ExpressionSpecification, FilterSpecification, LineLayerSpecification, StyleSpecification, SymbolLayerSpecification } from 'maplibre-gl';
 import type { RouteChapter, RouteData } from './route-data.js';
 
-export const routeLayers = ['gpx-track', 'official-course'];
 export const routeHitLayer = 'route-hit';
-const routeColor = '#ff806f';
-const ferryColor = '#b6bfda';
-const sea = '#151e34';
-const land = '#26344e';
-const border = '#536380';
-const label = '#bac5de';
+export const partialRouteSource = 'partial-route';
+const sea = '#c2bbec';
+const land = '#f7eba5';
+const border = '#9d8760';
+const label = '#4e3f5d';
+const routeKinds = ['ride', 'official', 'ferry'] as const;
+const unread = '#75627b';
+const yellow = '#ffdf32';
+const outline = '#61462a';
 
-export function routeEmphasis(
-  activeId: string | null,
-  hoveredId: string | null,
-  emphasis: number,
-  normal: number
-): DataDrivenPropertyValueSpecification<number> {
-  return ['case',
-    ['==', ['get', 'chapterId'], hoveredId ?? ''], emphasis,
-    ['==', ['get', 'chapterId'], activeId ?? ''], emphasis,
-    normal
-  ];
+const kindFilter = (kind: string): ExpressionSpecification => ['==', ['get', 'kind'], kind];
+export const completedRouteLayers = ['outline', ...routeKinds];
+
+export function completedFilter(kind: string, order: number): FilterSpecification {
+  return ['all', kindFilter(kind === 'outline' ? 'ride' : kind), ['<', ['get', 'order'], order]];
+}
+
+function routeLines(source: string, completed: boolean): LineLayerSpecification[] {
+  const layout = { 'line-cap': 'round', 'line-join': 'round' } as const;
+  const layers: LineLayerSpecification[] = routeKinds.map((kind) => ({
+    id: source + '-' + kind,
+    source: source === 'completed' ? 'route' : source,
+    type: 'line',
+    filter: source === 'completed' ? completedFilter(kind, 0) : kindFilter(kind),
+    layout,
+    paint: {
+      'line-color': completed ? yellow : unread,
+      'line-width': kind === 'ride' ? (completed ? 3.8 : 2.8) : (completed ? 3 : 2),
+      ...(kind !== 'ride' && { 'line-dasharray': kind === 'ferry' ? [0.65, 2.25] : [2, 1.6] })
+    }
+  }));
+
+  if (!completed) return layers;
+  return [{
+    id: source + '-outline',
+    source: source === 'completed' ? 'route' : source,
+    type: 'line',
+    filter: source === 'completed' ? completedFilter('outline', 0) : kindFilter('ride'),
+    layout,
+    paint: { 'line-color': outline, 'line-width': 6 }
+  }, ...layers];
 }
 
 export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpecification {
@@ -38,10 +60,12 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
 
   return {
     version: 8,
+    projection: { type: 'mercator' },
     glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
     sources: {
       basemap: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
       route: { type: 'geojson', data: route },
+      [partialRouteSource]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       'arctic-circle': {
         type: 'geojson',
         data: {
@@ -74,11 +98,11 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
       {
         id: 'woodland', type: 'fill', source: 'basemap', 'source-layer': 'landcover', minzoom: 8,
         filter: ['==', ['get', 'class'], 'wood'],
-        paint: { 'fill-color': '#223c45', 'fill-opacity': 0.6 }
+        paint: { 'fill-color': '#bcbe7f', 'fill-opacity': 0.6 }
       },
       {
         id: 'waterways', type: 'line', source: 'basemap', 'source-layer': 'waterway', minzoom: 8,
-        paint: { 'line-color': '#17233a', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.6, 14, 2] }
+        paint: { 'line-color': '#afa4cf', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.6, 14, 2] }
       },
       {
         id: 'borders', type: 'line', source: 'basemap', 'source-layer': 'boundary',
@@ -89,22 +113,22 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
         id: 'major-roads', type: 'line', source: 'basemap', 'source-layer': 'transportation', minzoom: 6,
         filter: ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'], true, false],
         paint: {
-          'line-color': '#56627c',
+          'line-color': '#c0a46e',
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 1, 15, 3]
         }
       },
       {
         id: 'local-roads', type: 'line', source: 'basemap', 'source-layer': 'transportation', minzoom: 10,
         filter: ['match', ['get', 'class'], ['minor', 'service', 'track', 'path'], true, false],
-        paint: { 'line-color': '#434f68', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 15, 1.6] }
+        paint: { 'line-color': '#c5ad76', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 15, 1.6] }
       },
       {
         id: 'arctic-line', type: 'line', source: 'arctic-circle',
         filter: ['==', ['geometry-type'], 'LineString'],
-        paint: { 'line-color': '#8191b1', 'line-opacity': 0.7, 'line-dasharray': [3, 4] }
+        paint: { 'line-color': '#776a91', 'line-opacity': 0.7, 'line-dasharray': [3, 4] }
       },
       {
-        id: 'arctic-label', type: 'symbol', source: 'arctic-circle', maxzoom: 7,
+        id: 'arctic-label', type: 'symbol', source: 'arctic-circle', minzoom: 2.4, maxzoom: 7,
         filter: ['==', ['geometry-type'], 'Point'],
         layout: {
           'text-field': 'ARCTIC CIRCLE',
@@ -120,7 +144,7 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
           'text-size': ['interpolate', ['linear'], ['zoom'], 3, 10, 7, 13],
           'text-transform': 'uppercase', 'text-letter-spacing': 0.16, 'text-padding': 12
         },
-        paint: { 'text-color': '#9caed0', 'text-halo-color': land, 'text-halo-width': 1 }
+        paint: { 'text-color': '#5c4b50', 'text-halo-color': land, 'text-halo-width': 1 }
       },
       {
         id: 'places', type: 'symbol', source: 'basemap', 'source-layer': 'place', minzoom: 5,
@@ -132,28 +156,9 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
         layout: { ...placeLayout, 'text-size': 12 },
         paint: { 'text-color': label, 'text-halo-color': land, 'text-halo-width': 1.4 }
       },
-      {
-        id: 'ferries', type: 'line', source: 'route',
-        filter: ['==', ['get', 'kind'], 'ferry'],
-        paint: { 'line-color': ferryColor, 'line-width': 1.6, 'line-dasharray': [2, 3] }
-      },
-      {
-        id: 'track-outline', type: 'line', source: 'route',
-        filter: ['==', ['get', 'kind'], 'ride'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#11182b', 'line-width': 5, 'line-opacity': 0.8 }
-      },
-      {
-        id: routeLayers[0], type: 'line', source: 'route',
-        filter: ['==', ['get', 'kind'], 'ride'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': routeColor, 'line-width': 2.6 }
-      },
-      {
-        id: routeLayers[1], type: 'line', source: 'route',
-        filter: ['==', ['get', 'kind'], 'official'],
-        paint: { 'line-color': routeColor, 'line-width': 2.6, 'line-dasharray': [2, 1.6] }
-      },
+      ...routeLines('route', false),
+      ...routeLines('completed', true),
+      ...routeLines(partialRouteSource, true),
       // A wider invisible line makes route segments easier to select.
       {
         id: routeHitLayer, type: 'line', source: 'route',
