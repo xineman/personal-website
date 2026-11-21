@@ -1,151 +1,140 @@
 <script lang="ts">
   import RouteMap from './RouteMap.svelte';
-  import type { RouteChapter } from './route-data.js';
+  import type { MapFraming, RouteChapter } from './route-data.js';
+  import type { ReadingPosition } from './route-progress.js';
 
   interface Props {
     chapters: RouteChapter[];
-    activeChapter: RouteChapter | undefined;
-    element: HTMLElement | undefined;
-    heading: HTMLHeadingElement | undefined;
+    position: ReadingPosition;
+    framing: MapFraming | undefined;
+    scrollPosition: number;
+    exploring: boolean;
+    onToggle: () => void;
+    onChapter: (id: string) => void;
+    element?: HTMLElement;
+    toggle?: HTMLButtonElement;
   }
 
-  // The story page uses the atlas bounds and moves focus to its heading.
-  let { chapters, activeChapter, element = $bindable(), heading = $bindable() }: Props = $props();
-  const activeId = $derived(activeChapter?.id ?? null);
+  let { chapters, position, framing, scrollPosition, exploring, onToggle, onChapter, element = $bindable(), toggle = $bindable() }: Props = $props();
+  const active = $derived(chapters[Math.min(position.chapter, chapters.length - 1)]);
+  const place = $derived(position.percent === 100 ? 'North Cape reached' : active?.title ?? 'Rovereto to North Cape');
+  const onRight = $derived(position.chapter % 2 === 1 || position.chapter >= chapters.length);
+  let ready = $state(false);
 </script>
 
-<aside class="atlas" id="route" aria-labelledby="route-title" tabindex="-1" bind:this={element}>
-  <div class="atlas__sticky">
-    <header class="atlas__header">
-      <div>
-        <h2 id="route-title" tabindex="-1" bind:this={heading}>Follow the route</h2>
-        <p><span class="atlas__drag">Drag to explore.</span><span class="atlas__touch">Explore with two fingers.</span> Pick a stop or route segment to read its chapter.</p>
+<aside class="atlas" class:exploring class:panel-right={onRight} id="route" aria-label="Route" bind:this={element}>
+  <section class="map-sheet" role={exploring ? 'dialog' : undefined} aria-modal={exploring ? true : undefined}
+    aria-label="Interactive map of the ride" aria-describedby={exploring ? 'map-gesture' : undefined}>
+    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {onChapter} bind:ready />
+
+    {#if ready}
+      <div class="reading-status">
+        <div class="reading-value" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={position.percent}>
+          <span>{position.percent}%</span> read
+        </div>
+        <p>{place}</p>
       </div>
-      <svg class="atlas__north" viewBox="0 0 28 42" width="22" height="34" fill="none" aria-hidden="true"><path d="M14 16 5 37l9-4.3 9 4.3L14 16Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M14 16 5 37l9-4.3V16Z" fill="currentColor"/><path d="M10.5 11V3l7 8V3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-    </header>
-    <RouteMap {chapters} {activeId} />
-    <div class="atlas__footer">
-      <p class="atlas__legend"><span><i></i>GPX track</span><span><i></i>Official course</span><span><i></i>Ferry crossing</span></p>
-      <nav class="atlas__index" aria-label="Jump to chapter">
-        {#each chapters as chapter, index (chapter.id)}
-          <a
-            href={'#' + chapter.id}
-            title={chapter.title}
-            aria-label={`Chapter ${index + 1}, ${chapter.title}`}
-            aria-current={activeId === chapter.id ? 'location' : undefined}
-          >{chapter.number}</a>
-        {/each}
-      </nav>
-      <p class="atlas__current" aria-hidden="true">{activeChapter ? `Chapter ${activeChapter.number} · ${activeChapter.title}` : 'Rovereto to North Cape'}</p>
-    </div>
-  </div>
+      <div class="map-compass" aria-label="North is up">
+        <span>N</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 6 20l6-4 6 4-6-16Zm0 1v11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </div>
+      <button class="explore" type="button" onclick={onToggle} aria-expanded={exploring} bind:this={toggle}>
+        {exploring ? 'Back to story' : 'Explore map'}
+      </button>
+      {#if exploring}
+        <p id="map-gesture" class="map-gesture">
+          <span class="mouse">Scroll to zoom · Drag to pan</span>
+          <span class="touch">Pinch to zoom · Drag to pan</span>
+        </p>
+      {/if}
+      <p class="map-key" aria-label="Route legend">
+        <span><i></i>Read</span><span><i></i>Ahead</span><span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
+      </p>
+    {/if}
+  </section>
 </aside>
 
 <style>
   .atlas {
-    grid-area: atlas;
-    position: relative;
-    min-width: 0;
-    border-inline-start: 1px solid var(--color-border);
-    background: var(--color-ink);
-    color: var(--color-white);
-  }
-  .atlas__sticky {
     position: sticky;
     top: 0;
-    display: flex;
-    flex-direction: column;
+    grid-area: 1 / 1 / 3;
+    align-self: start;
+    height: 100svh;
+    min-height: 24rem;
   }
-  .atlas__header, .atlas__footer { padding-inline: clamp(1.5rem, 3vw, 3.25rem); }
-  .atlas__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-top: 1.55rem;
-    padding-bottom: .85rem;
-  }
-  .atlas__header h2 {
-    font-family: var(--font-display);
-    font-weight: 800;
-    font-size: 2.25rem;
-    line-height: 1;
-    letter-spacing: -.015em;
-  }
-  .atlas__header p {
-    margin-top: .5rem;
-    max-width: 52ch;
-    color: var(--color-muted);
-    font-size: .875rem;
-    line-height: 1.45;
-  }
-  .atlas__north { flex: none; color: var(--color-route); margin-top: .2rem; }
-  .atlas__footer {
-    display: grid;
-    gap: .7rem;
-    border-top: 1px solid var(--color-border);
-    padding-block: .85rem 1.1rem;
-  }
-  .atlas__legend, .atlas__current {
-    color: var(--color-muted);
-    font-size: .76rem;
-    font-weight: 550;
-    line-height: 1.35;
-  }
-  .atlas__legend, .atlas__legend span { display: flex; align-items: center; gap: .6rem; }
-  .atlas__legend { flex-wrap: wrap; gap: .6rem 1.15rem; }
-  .atlas__legend i { width: 1.25rem; border-top: 2px solid var(--color-route); }
-  .atlas__legend span:nth-child(2) i { border-top-style: dashed; }
-  .atlas__legend span:nth-child(3) i { border-top-style: dashed; border-color: var(--color-muted); }
-  .atlas__index { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .35rem; }
-  .atlas__index a {
-    display: grid;
-    min-height: 2.75rem;
-    place-items: center;
-    border: 1px solid var(--color-border);
-    border-radius: 3px;
-    color: var(--color-white);
-    font-size: .83rem;
+  .atlas.exploring { z-index: 4; }
+  .map-sheet { position: absolute; inset: 0; overflow: hidden; }
+  .exploring .map-sheet { position: fixed; inset: 0 0 auto; height: 100dvh; }
+  .reading-status, .map-key, .map-gesture {
+    position: absolute;
+    background: var(--color-paper);
+    font-size: .75rem;
     font-weight: 650;
-    font-variant-numeric: tabular-nums;
-    text-decoration: none;
+    pointer-events: none;
   }
-  .atlas__index a:hover { border-color: var(--color-route); }
-  .atlas__index a[aria-current] {
-    background: var(--color-route);
-    border-color: var(--color-route);
+  .reading-status { top: 1.35rem; right: .85rem; width: 8.2rem; padding: .65rem .85rem .7rem; }
+  .reading-status p { margin-top: .25rem; font-size: .81rem; line-height: 1.38; }
+  .reading-value { display: flex; align-items: baseline; gap: .4rem; font-size: .87rem; font-weight: 750; }
+  .reading-value span { font: 800 2rem/.95 var(--font-display); font-variant-numeric: tabular-nums; }
+  .map-compass {
+    position: absolute;
+    top: 8.4rem;
+    right: 1.25rem;
+    display: grid;
+    justify-items: center;
+    font-size: .7rem;
+    font-weight: 800;
+    pointer-events: none;
+  }
+  .explore {
+    position: absolute;
+    right: 1.25rem;
+    bottom: 2.25rem;
+    min-height: 2.75rem;
+    padding: .45rem .75rem;
+    border: 1px solid var(--color-ink);
+    background: var(--color-paper);
     color: var(--color-ink);
+    font-size: .85rem;
+    font-weight: 730;
+    cursor: pointer;
   }
-  .atlas__index a:focus-visible { outline-color: var(--color-white); }
-  .atlas__current {
-    min-height: 1.2em;
-    color: var(--color-white);
+  .explore:hover { background: var(--color-route); }
+  .explore:focus-visible { outline-offset: -4px; }
+  .map-key { display: flex; flex-wrap: wrap; gap: .35rem .8rem; right: 10rem; bottom: 2.25rem; padding: .35rem .65rem; }
+  .map-key span { display: inline-flex; align-items: center; gap: .33rem; }
+  .map-key i { width: .9rem; border-top: 2px solid var(--color-unread); }
+  .map-key span:first-child i { border-top: 3px solid #a27800; }
+  .ferry i { border-top-style: dotted; }
+  .official i { border-top-style: dashed; }
+  .map-gesture { bottom: 2.25rem; left: var(--edge); padding: .45rem .65rem; }
+  .touch { display: none; }
+
+  @media (hover: none) and (pointer: coarse) {
+    .mouse { display: none; }
+    .touch { display: inline; }
   }
-
-  @media (max-width: 960px) {
-    .atlas { border: 0; }
-    .atlas__sticky { position: relative; }
-    .atlas__header, .atlas__footer { padding-inline: clamp(1.25rem, 6.5vw, 4.5rem); }
+  @media (min-width: 1061px) {
+    .atlas, .map-sheet { pointer-events: none; }
+    .explore { pointer-events: auto; }
   }
-
-  @media (max-height: 32rem) {
-    .atlas__sticky { position: relative; }
+  @media (min-width: 1181px) {
+    .panel-right:not(.exploring) .map-key { right: auto; left: var(--edge); }
   }
-
-  @media (max-width: 480px) {
-    .atlas__header h2 { font-size: 2rem; }
-    .atlas__header p { max-width: 30ch; }
-    .atlas__footer { gap: .63rem; }
+  @media (max-width: 1060px) {
+    .atlas { z-index: 2; height: var(--dock-height); min-height: 0; border-block: 1px solid var(--color-ink); }
+    .reading-status { top: .55rem; right: auto; left: .55rem; width: max-content; max-width: 32%; padding: .4rem .5rem; }
+    .reading-status p { font-size: .665rem; }
+    .reading-value { gap: .28rem; font-size: .72rem; }
+    .reading-value span { font-size: 1.55rem; }
+    .map-compass { top: .5rem; right: .75rem; }
+    .explore { right: .55rem; bottom: 1.85rem; font-size: .76rem; }
+    .map-key { display: none; }
+    .exploring .map-key { display: flex; inset: 8.9rem auto auto .55rem; max-width: 10rem; }
+    .map-gesture { inset: 6.7rem auto auto .55rem; }
   }
-
-  .atlas__touch { display: none; }
-
-  @media (hover: none), (pointer: coarse) {
-    .atlas__drag { display: none; }
-    .atlas__touch { display: inline; }
-  }
-
-  @media print {
+  @media print, (scripting: none) {
     .atlas { display: none; }
   }
 </style>
