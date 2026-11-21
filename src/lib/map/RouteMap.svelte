@@ -2,8 +2,8 @@
   import { onMount, untrack } from 'svelte';
   import { asset } from '$app/paths';
   import 'maplibre-gl/dist/maplibre-gl.css';
-  import type { GeoJSONSource, JumpToOptions, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from 'maplibre-gl';
-  import type { MapFraming, RouteChapter, RouteData } from './route-data.js';
+  import type { GeoJSONSource, JumpToOptions, LngLatBounds, Map as MapLibreMap, MapMouseEvent, MapTouchEvent, Marker } from 'maplibre-gl';
+  import type { MapFraming, RouteChapter, RouteData, ScreenPoint } from './route-data.js';
   import { prepareRoute, type ReadingPosition } from './route-progress.js';
   import { atlasStyle, completedFilter, completedRouteLayers, partialRouteSource, routeHitLayer } from './map-style.js';
 
@@ -13,11 +13,13 @@
     framing: MapFraming | undefined;
     scrollPosition: number;
     exploring: boolean;
+    onExplore: (open: boolean, drag?: ScreenPoint) => void;
+    onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
     ready: boolean;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, onChapter, ready = $bindable(false) }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, onExplore, onReturnCamera, onChapter, ready = $bindable(false) }: Props = $props();
   let host: HTMLDivElement;
   let map: MapLibreMap | undefined;
   let routeBounds: LngLatBounds;
@@ -30,6 +32,7 @@
   let basemapUnavailable = $state(false);
   let zoom = $state(0);
   let mode = false;
+  let openingFromDrag = false;
   let followsStory = true;
   let switching = false;
   let switchSequence = 0;
@@ -38,6 +41,19 @@
   let previousFraming: MapFraming | undefined;
   const minZoom = 0.5;
   const maxZoom = 16;
+
+  function gesturePosition(event: MouseEvent | TouchEvent | undefined): ScreenPoint | undefined {
+    if (event instanceof MouseEvent) return { x: event.clientX, y: event.clientY };
+    const touches = event?.touches;
+    if (!touches?.length) return;
+    let x = 0;
+    let y = 0;
+    for (const touch of touches) {
+      x += touch.clientX;
+      y += touch.clientY;
+    }
+    return { x: x / touches.length, y: y / touches.length };
+  }
 
   function framedCamera(panel?: MapFraming): JumpToOptions | undefined {
     if (!map || !host.clientWidth || !host.clientHeight) return;
@@ -56,7 +72,7 @@
     if (target) map.jumpTo(target);
   }
 
-  function animateCamera(destination: (instance: MapLibreMap) => JumpToOptions | undefined) {
+  function animateCamera(destination: (instance: MapLibreMap) => JumpToOptions | undefined, duration = 280) {
     if (!map) return;
     const instance = map;
     const sequence = ++switchSequence;
@@ -78,27 +94,47 @@
       return;
     }
     instance.once('moveend', settled);
-    instance.easeTo({ ...target, duration: 280, easing: (t) => 1 - (1 - t) ** 3 });
+    instance.easeTo({ ...target, duration, easing: (t) => 1 - (1 - t) ** 3 });
+  }
+
+  function captureReadingView(instance: MapLibreMap) {
+    return { camera: { center: instance.getCenter(), zoom: instance.getZoom() }, follows: followsStory };
+  }
+
+  function setMapMode(instance: MapLibreMap, open: boolean) {
+    mode = open;
+    if (open) {
+      instance.cooperativeGestures.disable();
+      instance.scrollZoom.enable();
+    } else {
+      instance.cooperativeGestures.enable();
+      instance.scrollZoom.disable();
+      followsStory = readingView?.follows ?? true;
+    }
   }
 
   function changeMode(open: boolean, panel: MapFraming | undefined) {
-    if (open === mode) return;
+    if (!map || open === mode) return;
+    if (open && openingFromDrag) {
+      openingFromDrag = false;
+      setMapMode(map, true);
+      return;
+    }
+    // Fit the route as the map shrinks so the returning dock never paints the full-screen camera cropped.
+    const returningToDock = !open && host.clientHeight < map.getCanvas().clientHeight;
     animateCamera((instance) => {
-      if (open && !readingView) {
-        readingView = { camera: { center: instance.getCenter(), zoom: instance.getZoom() }, follows: followsStory };
-      }
-      mode = open;
+      if (open) readingView ??= captureReadingView(instance);
+      setMapMode(instance, open);
       instance.resize();
-      if (open) {
-        instance.cooperativeGestures.disable();
-        instance.scrollZoom.enable();
-      } else {
-        instance.cooperativeGestures.enable();
-        instance.scrollZoom.disable();
-        followsStory = readingView?.follows ?? true;
+      const target = readingView && !readingView.follows ? readingView.camera : framedCamera(open ? undefined : panel);
+      if (!open && target?.center) {
+        const from = instance.project(instance.getCenter());
+        const to = instance.project(target.center);
+        // Let the returning paper move with the map as the route comes back into view.
+        onReturnCamera({ x: to.x - from.x, y: to.y - from.y });
       }
-      return readingView && !readingView.follows ? readingView.camera : framedCamera(open ? undefined : panel);
-    });
+      return target;
+    }, returningToDock ? 0 : undefined);
   }
 
   function syncReading(panel: MapFraming | undefined, scroll: number) {
@@ -287,11 +323,45 @@
           if (event.originalEvent) followsStory = false;
         });
         instance.on('move', () => updateMarkers(instance));
-        resize = new ResizeObserver(() => {
+
+        let beforeDrag: typeof readingView;
+        let dragOrigin: ScreenPoint | undefined;
+        let panning = false;
+        let resizePending = false;
+        function resizeMap() {
+          if (controller.signal.aborted) return;
+          // MapLibre can cancel the current pan when the dock expands to fill the viewport.
+          resizePending = panning;
+          if (resizePending) return;
           instance.resize();
           followReading();
           updateMarkers(instance);
+        }
+
+        function prepareDrag({ originalEvent }: MapMouseEvent | MapTouchEvent) {
+          if (exploring) return;
+          beforeDrag = captureReadingView(instance);
+          dragOrigin = gesturePosition(originalEvent);
+        }
+
+        instance.on('mousedown', prepareDrag);
+        instance.on('touchstart', prepareDrag);
+        instance.on('dragstart', ({ originalEvent }) => {
+          panning = true;
+          if (exploring) return;
+          readingView ??= beforeDrag;
+          openingFromDrag = true;
+          const current = gesturePosition(originalEvent);
+          onExplore(true, dragOrigin && current && {
+            x: current.x - dragOrigin.x,
+            y: current.y - dragOrigin.y
+          });
         });
+        instance.on('dragend', () => {
+          panning = false;
+          if (resizePending) queueMicrotask(resizeMap);
+        });
+        resize = new ResizeObserver(resizeMap);
         resize.observe(host);
       } catch {
         if (!controller.signal.aborted) unavailable = true;

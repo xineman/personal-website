@@ -22,3 +22,8 @@ export interface MapFraming {
   center: number;
   width: number;
 }
+
+export interface ScreenPoint {
+  x: number;
+  y: number;
+}

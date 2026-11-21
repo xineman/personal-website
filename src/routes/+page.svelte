@@ -3,7 +3,7 @@
   import { asset } from '$app/paths';
   import RouteAtlas from '#lib/map/RouteAtlas.svelte';
   import type { ReadingPosition } from '#lib/map/route-progress.js';
-  import type { MapFraming } from '#lib/map/route-data.js';
+  import type { MapFraming, ScreenPoint } from '#lib/map/route-data.js';
   import article from '../../content/article.json';
 
   type PhotoPlacement = { after: number; images: string[] };
@@ -18,7 +18,12 @@
   let framing = $state<MapFraming>();
   let scrollPosition = $state(0);
   let exploring = $state(false);
+  let paperHidden = $state(false);
+  let positioningPaper = $state(false);
+  let paperDockInset = $state(0);
+  let paperOffset = $state<string>();
   let cover: HTMLElement;
+  let coverPaper: HTMLDivElement;
   let intro: HTMLElement;
   let journal: HTMLElement;
   let afterword: HTMLElement;
@@ -27,6 +32,8 @@
   let sections: HTMLElement[] = [];
   let frame: number | undefined;
   let readingScroll = 0;
+  let exploreSequence = 0;
+  let returnOffset: ScreenPoint | undefined;
   let docked: MediaQueryList;
   let alternating: MediaQueryList;
   let reducedMotion: MediaQueryList;
@@ -41,17 +48,25 @@
     frame = undefined;
     if (exploring || !atlas || !sections.length) return;
     scrollPosition = window.scrollY;
+    const page = document.documentElement;
+    const maxScroll = page.scrollHeight - page.clientHeight;
+    const started = maxScroll > 0 && scrollPosition > 0;
+    const finished = started && scrollPosition >= maxScroll;
     const line = docked.matches
       ? Math.max(0, Math.min(atlas.getBoundingClientRect().bottom, atlas.offsetHeight)) + 32
       : Math.min(145, window.innerHeight * 0.2);
     const tops = sections.map((section) => section.getBoundingClientRect().top);
-    const end = afterword.getBoundingClientRect().top;
     const current = tops.findLastIndex((top) => top <= line);
-    const finished = end <= line;
-    const chapter = finished ? chapters.length : current;
-    const fraction = finished ? 1 : current < 0 ? 0
-      : Math.round(clamp((line - tops[current]) / ((tops[current + 1] ?? end) - tops[current])) * 400) / 400;
-    const percent = finished ? 100 : Math.min(99, Math.round(100 * clamp((line - tops[0]) / (end - tops[0]))));
+    const chapter = finished ? sections.length : started ? Math.max(0, current) : -1;
+    const percent = finished ? 100 : started ? Math.max(1, Math.min(99, Math.round(100 * scrollPosition / maxScroll))) : 0;
+    let fraction = Number(finished);
+    if (started && !finished) {
+      // Keep the chapter transitions at the reading line and extend the first and last legs to the page edges.
+      const start = chapter === 0 ? -scrollPosition : tops[chapter] - line;
+      const nextTop = tops[chapter + 1];
+      const end = nextTop === undefined ? maxScroll - scrollPosition : nextTop - line;
+      fraction = clamp(-start / (end - start));
+    }
     if (chapter !== position.chapter || fraction !== position.fraction || percent !== position.percent) {
       position = { chapter, fraction, percent };
     }
@@ -64,7 +79,8 @@
     const coverRight = cover.getBoundingClientRect().right;
     const introRect = intro.getBoundingClientRect();
     const next = sections[current + 1] ?? afterword;
-    const blend = clamp((window.innerHeight * .85 - (tops[current + 1] ?? end)) / (window.innerHeight * .65));
+    const nextTop = tops[current + 1] ?? afterword.getBoundingClientRect().top;
+    const blend = clamp((window.innerHeight * .85 - nextTop) / (window.innerHeight * .65));
     const side = (element: HTMLElement | undefined) =>
       Number(alternating.matches && !!element?.classList.contains('story-panel--right'));
     const ratio = reducedMotion.matches ? Number(blend === 1) : blend;
@@ -87,14 +103,45 @@
     frame ??= requestAnimationFrame(updateReading);
   }
 
-  async function setExploring(open: boolean) {
+  function slideOffset(direction?: ScreenPoint) {
+    if (!direction) return;
+    const distance = Math.hypot(direction.x, direction.y);
+    if (distance < 1) return;
+    const scale = (docked.matches ? 12 : 24) / distance;
+    return `${direction.x * scale}px ${direction.y * scale}px`;
+  }
+
+  async function setExploring(open: boolean, drag?: ScreenPoint) {
     if (open === exploring) return;
-    if (open) readingScroll = window.scrollY;
+    const sequence = ++exploreSequence;
+    returnOffset = undefined;
+    if (open) {
+      readingScroll = window.scrollY;
+      paperDockInset = docked.matches && atlas
+        ? Math.max(0, atlas.getBoundingClientRect().bottom - journal.getBoundingClientRect().top)
+        : 0;
+      positioningPaper = false;
+      paperOffset = slideOffset(drag);
+      paperHidden = true;
+    }
     exploring = open;
     document.documentElement.classList.toggle('is-map-exploring', open);
     await tick();
-    if (exploring !== open) return;
-    if (!open && window.scrollY !== readingScroll) window.scrollTo(0, readingScroll);
+    if (sequence !== exploreSequence) return;
+    if (!open) {
+      if (window.scrollY !== readingScroll) window.scrollTo(0, readingScroll);
+      const offset = slideOffset(returnOffset);
+      if (!reducedMotion.matches && offset !== paperOffset && getComputedStyle(coverPaper).visibility === 'hidden') {
+        positioningPaper = true;
+        paperOffset = offset;
+        await tick();
+        if (sequence !== exploreSequence) return;
+        // Commit the new starting position while the paper is still invisible.
+        getComputedStyle(coverPaper).translate;
+        positioningPaper = false;
+      }
+      paperHidden = false;
+    }
     toggle?.focus({ preventScroll: true });
     scheduleReading();
   }
@@ -123,6 +170,7 @@
     sections = Array.from(journal.querySelectorAll<HTMLElement>('[data-chapter]'));
     const resize = new ResizeObserver(scheduleReading);
     resize.observe(journal);
+    resize.observe(document.body);
     scheduleReading();
     return () => {
       resize.disconnect();
@@ -168,39 +216,56 @@
   </a>
 </header>
 
-<main class="journey" class:is-exploring={exploring}>
+<main class="journey" class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
   <section class="cover" aria-labelledby="cover-title" inert={exploring} bind:this={cover}>
-    <h1 id="cover-title">The long<br> way north</h1>
-    <p>From the Italian Alps to the edge of Europe by bicycle.</p>
-    <p class="ride-facts">4,000 km <span></span> 22 days <span></span> 2022</p>
-    <a class="cover__action" href="#story">
-      Read the story
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m-5-5 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </a>
+    <div class="paper-surface" bind:this={coverPaper}>
+      <div class="paper-content">
+        <h1 id="cover-title">The long<br> way north</h1>
+        <p>From the Italian Alps to the edge of Europe by bicycle.</p>
+        <p class="ride-facts">≈3,825 km <span></span> 22 days <span></span> 2022</p>
+        <a class="cover__action" href="#story">
+          Read the story
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m-5-5 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </div>
+    </div>
   </section>
 
-  <RouteAtlas {chapters} {position} {framing} {scrollPosition} {exploring} onToggle={() => setExploring(!exploring)} onChapter={jumpToChapter} bind:element={atlas} bind:toggle />
+  <RouteAtlas {chapters} {position} {framing} {scrollPosition} {exploring} onExplore={setExploring}
+    onReturnCamera={(offset) => { returnOffset = offset; }} onChapter={jumpToChapter} bind:element={atlas} bind:toggle />
 
-  <article class="journal" aria-labelledby="story" inert={exploring} bind:this={journal}>
+  <article class="journal" aria-labelledby="story" inert={exploring} bind:this={journal} style:--paper-dock-inset={`${paperDockInset}px`}>
     <section class="story-panel" aria-labelledby="story" bind:this={intro}>
-      <header class="chapter-head">
-        <h2 id="story" tabindex="-1">Rovereto to North Cape</h2>
-      </header>
-      <p class="reading-hint">Scroll the story to trace the ride. Choose a map stop to jump to its chapter.</p>
-      {@render prose(article.intro)}
+      <div class="paper-surface">
+        <div class="paper-content">
+          <header class="chapter-head">
+            <h2 id="story" tabindex="-1">Rovereto to North Cape</h2>
+          </header>
+          <p class="reading-hint">Scroll the story to trace the ride. Choose a map stop to jump to its chapter.</p>
+          {@render prose(article.intro)}
+        </div>
+      </div>
     </section>
     {#each chapters as chapter, index (chapter.id)}
       <section class="story-panel" class:story-panel--right={index % 2 === 1} aria-labelledby={chapter.id} data-chapter>
-        <header class="chapter-head">
-          <h2 id={chapter.id} tabindex="-1">{chapter.title}</h2>
-          <p class="chapter-meta">Days {day(chapter.days[0])}–{day(chapter.days[1])} · {chapter.location}</p>
-        </header>
-        {@render prose(chapter.paragraphs, chapter.photos)}
+        <div class="paper-surface">
+          <div class="paper-content">
+            <header class="chapter-head">
+              <h2 id={chapter.id} tabindex="-1">{chapter.title}</h2>
+              <p class="chapter-meta">Days {day(chapter.days[0])}–{day(chapter.days[1])} · {chapter.location}</p>
+            </header>
+            {@render prose(chapter.paragraphs, chapter.photos)}
+          </div>
+        </div>
       </section>
     {/each}
     <section class="story-panel story-panel--right" aria-labelledby="afterword" bind:this={afterword}>
-      <header class="chapter-head"><h2 id="afterword" tabindex="-1">The way home</h2></header>
-      {@render prose(article.afterword, article.afterwordPhotos)}
+      <div class="paper-surface">
+        <div class="paper-content">
+          <header class="chapter-head"><h2 id="afterword" tabindex="-1">The way home</h2></header>
+          {@render prose(article.afterword, article.afterwordPhotos)}
+        </div>
+      </div>
     </section>
   </article>
 </main>
