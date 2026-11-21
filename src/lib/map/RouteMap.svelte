@@ -86,7 +86,9 @@
     async function start() {
       try {
         const [lib, worker, route] = await Promise.all([
-          import('maplibre-gl'),
+          import('maplibre-gl').then(({ Map, LngLatBounds, Marker, setWorkerUrl }) => ({
+            Map, LngLatBounds, Marker, setWorkerUrl
+          })),
           import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'),
           fetch(asset('route.geojson'), { signal: controller.signal }).then(async (response) => {
             if (!response.ok) throw new Error('Route GeoJSON request failed');
