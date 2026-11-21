@@ -159,7 +159,8 @@
             label.className = 'chapter-pin__label';
             label.textContent = chapter.pin;
             label.setAttribute('aria-hidden', 'true');
-            link.append(disc, label);
+            link.appendChild(disc);
+            link.appendChild(label);
 
             link.addEventListener('pointerenter', () => hoveredId = chapter.id);
             link.addEventListener('pointerleave', () => hoveredId = null);

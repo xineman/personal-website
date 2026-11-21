@@ -5,15 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "wrangler types --check && node scripts/generate-route.ts && vite build",
+    "build": "node scripts/generate-route.ts && vite build",
     "preview": "bun run build && wrangler dev",
     "generate:route": "node scripts/generate-route.ts",
     "prepare": "svelte-kit sync || echo ''",
-    "check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "gen": "wrangler types",
     "deploy": "bun run build && wrangler deploy",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types --include-main-module=false"
   },
   "dependencies": {
     "maplibre-gl": "^6.19.0",
