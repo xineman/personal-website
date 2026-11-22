@@ -54,6 +54,8 @@
   const recordings = new SvelteMap<number, RideData | 'loading' | 'failed'>();
   let loadReadings: ((order: number, retry: boolean) => Promise<void>) | undefined;
   let inspectionPoint = $state.raw<ScreenPoint>();
+  let inspectionAnchor = $state.raw<ScreenPoint>();
+  let inspectionPan = $state.raw<Coordinates>();
   let viewport = $state.raw({ width: 0, height: 0 });
   let profileSpan = 10_000;
   let highlighted: RideWindow | undefined;
@@ -208,10 +210,16 @@
     projectInspection();
   }
 
+  function isInViewport({ x, y }: ScreenPoint) {
+    return x >= 0 && x <= viewport.width && y >= 0 && y <= viewport.height;
+  }
+
   function projectInspection() {
     if (!map || !inspection) return;
     const point = map.project(inspection.coordinate);
-    inspectionPoint = point.x >= 0 && point.x <= viewport.width && point.y >= 0 && point.y <= viewport.height ? point : undefined;
+    inspectionPoint = isInViewport(point) ? point : undefined;
+    // Keep the popup anchored while the camera brings the marker back into view.
+    if (inspectionPoint && !inspectionPan) inspectionAnchor = inspectionPoint;
   }
 
   function isInspectionPinned() {
@@ -225,8 +233,13 @@
     if (inspection) {
       inspection = undefined;
       inspectionPoint = undefined;
+      inspectionAnchor = undefined;
       highlighted = undefined;
       map?.getSource<GeoJSONSource>(inspectedRouteSource)?.setData({ type: 'FeatureCollection', features: [] });
+    }
+    if (inspectionPan) {
+      inspectionPan = undefined;
+      map?.stop();
     }
     if (restoreFocus) map?.getCanvas().focus({ preventScroll: true });
   }
@@ -257,7 +270,8 @@
     const position = locateRidePoint(rideCourse, distance);
     void loadReadings?.(position.order, false);
     showInspection({ ...position, input: inspection.input });
-    revealInspectionPoint();
+    revealInspectionPoint(true);
+    return position.distance;
   }
 
   function resizeInspectionProfile() {
@@ -271,9 +285,25 @@
     if (inspection) showInspection(inspection);
   }
 
-  function revealInspectionPoint() {
-    // Scrubbing or snapping to a sample near the edge can move the point beyond the camera.
-    if (inspection && !inspectionPoint) map?.jumpTo({ center: inspection.coordinate });
+  function revealInspectionPoint(animate = false) {
+    if (!map || !inspection || inspectionPan === inspection.coordinate) return;
+    if (inspectionPan) {
+      const point = inspectionPoint ?? map.project(inspection.coordinate);
+      const offset = map.project(map.getCenter()).sub(map.project(inspectionPan));
+      if (isInViewport({ x: point.x + offset.x, y: point.y + offset.y })) return;
+    }
+    if (inspectionPoint) {
+      if (inspectionPan) map.stop();
+      return;
+    }
+    const center = inspection.coordinate;
+    if (!animate) {
+      map.jumpTo({ center });
+      return;
+    }
+    // An older pan can emit moveend while a new scrub target is taking over.
+    inspectionPan = center;
+    map.easeTo({ center, duration: 200, easing: (t) => t * t * (3 - 2 * t) }, { inspectionPan: center });
   }
 
   function showProgress(current: ReadingPosition) {
@@ -418,6 +448,7 @@
           const profile = route.elevationProfile;
           if (!profile) return;
           const pinned = input !== 'hover';
+          if (pinned && inspectionPan) instance.stop();
           if (pinned && inspection && inspection.order !== hit.order) clearInspection();
           if (!inspection && !pendingInspection) resizeInspectionProfile();
           const selection = { ...hit, input };
@@ -580,7 +611,11 @@
           screenPaths.clear();
           updateMarkers(instance);
         });
-        instance.on('moveend', () => {
+        instance.on('moveend', (event) => {
+          if (inspectionPan) {
+            if (!('inspectionPan' in event) || event.inspectionPan !== inspectionPan) return;
+            inspectionPan = undefined;
+          }
           if (inspection && inspection.input !== 'hover' && !inspectionPoint) clearInspection();
         });
         instance.on('zoom', resizeInspectionProfile);
@@ -657,7 +692,7 @@
 <div class="map-host" class:exploring bind:this={host} inert={!ready} aria-label="Route from Rovereto to North Cape"></div>
 
 {#if ready}
-  <div class="map-controls" class:inspecting={exploring && !!inspection && !!inspectionPoint} role="group" aria-label="Map controls">
+  <div class="map-controls" class:inspecting={exploring && !!inspection && !!(inspectionPoint || inspectionPan)} role="group" aria-label="Map controls">
     <button type="button" aria-label="Zoom in" title="Zoom in" onclick={() => changeZoom(1)} disabled={zoom >= maxZoom}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </button>
@@ -678,10 +713,10 @@
     <span aria-hidden="true">·</span>
     <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>
   </div>
-  {#if exploring && inspection && inspectionPoint && rideCourse && inspectedTrack}
+  {#if exploring && inspection && inspectionAnchor && (inspectionPoint || inspectionPan) && rideCourse && inspectedTrack}
     <RidePopup day={inspectedTrack.feature.properties.day} kind={inspectedTrack.feature.properties.kind}
       {dayDistance} sample={inspectedSample} distance={inspection.distance} window={inspection.window} routeElevation={rideCourse.elevation}
-      point={inspectionPoint} {viewport} pinned={inspection.input !== 'hover'} keyboard={inspection.input === 'keyboard'}
+      point={inspectionPoint} anchor={inspectionAnchor} {viewport} pinned={inspection.input !== 'hover'} keyboard={inspection.input === 'keyboard'}
       onClear={() => clearInspection(true)} onScrub={scrubInspection} />
   {/if}
   {#if exploring && inspectionNotice}
