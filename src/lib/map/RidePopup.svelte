@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
   import { on } from 'svelte/events';
+  import RollingNumber from '../RollingNumber.svelte';
   import type { RouteData, ScreenPoint } from './route-data.js';
   import { elevationAtDistance, type ElevationPoint, type RideSample, type RideWindow } from './ride-data.js';
   import { placeRidePopup, popupLeader, type ScreenRect } from './ride-inspection.js';
@@ -40,17 +41,54 @@
   const decimal = new Intl.NumberFormat('en', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
   const clock = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
 
+  function readingScale(value: number, scaleRange: number) {
+    return Math.min(1.06, Math.max(.94, .91 + .15 * value / scaleRange));
+  }
+
+  function emphasizeReading(node: HTMLElement, previous: { value: number; scale: number }) {
+    const motion = matchMedia('(prefers-reduced-motion: reduce)');
+    let animation: Animation | undefined;
+    const cancel = () => animation?.cancel();
+    motion.addEventListener('change', cancel);
+
+    return {
+      update(reading: typeof previous) {
+        const direction = Math.sign(reading.value - previous.value);
+        const previousScale = previous.scale;
+        previous = reading;
+        if (!direction) return;
+        if (motion.matches) return;
+        const start = animation?.playState === 'running'
+          ? getComputedStyle(node).transform
+          : `scale(${previousScale})`;
+        cancel();
+
+        const settled = reading.scale;
+        const emphasis = Math.min(1.18, Math.max(.84, settled + direction * .12));
+        animation = node.animate([
+          { transform: start, easing: 'ease-out' },
+          { transform: `scale(${emphasis})`, offset: .35, easing: 'ease-in-out' },
+          { transform: `scale(${settled})` }
+        ], 360);
+      },
+      destroy() {
+        motion.removeEventListener('change', cancel);
+        cancel();
+      }
+    };
+  }
+
   const elevation = $derived(elevationAtDistance(routeElevation, distance));
   const readings = $derived([
-    { label: 'Estimated speed', value: sample?.[3] == null ? null : number.format(Math.round(sample[3])), unit: 'km/h' },
-    { label: 'Elevation', value: elevation === null ? null : number.format(Math.round(elevation)), unit: 'm' },
-    { label: 'Heart rate', value: sample?.[4] == null ? null : number.format(sample[4]), unit: 'bpm' }
-  ].filter(({ value }) => value !== null));
+    { label: 'Estimated speed', value: sample?.[3] == null ? null : Math.round(sample[3]), unit: 'km/h', maxAnimatedDelta: 5, scaleRange: 50 },
+    { label: 'Elevation', value: elevation === null ? null : Math.round(elevation), unit: 'm', maxAnimatedDelta: 30, scaleRange: 1000 },
+    { label: 'Heart rate', value: sample?.[4] ?? null, unit: 'bpm' }
+  ].filter((reading): reading is typeof reading & { value: number } => reading.value !== null));
   const title = $derived(kind === 'ferry' ? 'Ferry crossing' :
     kind === 'official' ? `Day ${day} · Official course` : `Day ${day} · km ${decimal.format(dayDistance / 1000)}`);
   const time = $derived(kind === 'ride' && sample?.[2] != null ? `${clock.format(sample[2] * 1000)} UTC` : undefined);
   const description = $derived([`Trip kilometer ${axisNumber.format(distance / 1000)}`,
-    ...readings.map(({ label, value, unit }) => `${label} ${value} ${unit}`), time].filter(Boolean).join(', '));
+    ...readings.map(({ label, value, unit }) => `${label} ${number.format(value)} ${unit}`), time].filter(Boolean).join(', '));
 
   const plot = { left: 43, top: 10, right: 305, bottom: 64 };
   const plotWidth = plot.right - plot.left;
@@ -241,10 +279,20 @@
     </header>
     {#if readings.length}
       <dl class="readings" style:--reading-count={readings.length}>
-        {#each readings as { label, value, unit } (label)}
+        {#each readings as { label, value, unit, maxAnimatedDelta, scaleRange } (label)}
           <div>
             <dt>{label}</dt>
-            <dd>{value}<small>{unit}</small></dd>
+            <dd>
+              {#if scaleRange !== undefined}
+                {@const scale = readingScale(value, scaleRange)}
+                <span class="scaled-value" class:wide-value={Math.abs(value) >= 1000}
+                  style:--reading-scale={scale} use:emphasizeReading={{ value, scale }}>
+                  <RollingNumber {value} formatter={number} {maxAnimatedDelta} />
+                </span>
+              {:else}
+                {number.format(value)}
+              {/if}<small>{unit}</small>
+            </dd>
           </div>
         {/each}
       </dl>
@@ -340,6 +388,16 @@
   dt, .missing { font-size: .69rem; font-weight: 670; line-height: var(--reading-label-line); }
   dd { margin: 0; white-space: nowrap; font: 800 var(--reading-value-size)/var(--reading-value-line) var(--font-display); }
   dd small { margin-left: .18rem; font: 690 .71rem/1 var(--font-ui); }
+  .scaled-value {
+    display: inline-block;
+    transform: scale(var(--reading-scale));
+    transform-origin: center;
+  }
+  .scaled-value + small { margin-inline-start: .36rem; }
+  .wide-value + small { margin-inline-start: .46rem; }
+  @media (prefers-reduced-motion: reduce) {
+    .scaled-value { transform: none; }
+  }
   .profile { margin-inline: .75rem; padding-bottom: .34rem; border-top: 1px solid var(--color-rule); }
   .profile header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.45rem; font-size: .72rem; }
   .profile strong { font-weight: 780; }

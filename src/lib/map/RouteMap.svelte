@@ -66,8 +66,10 @@
   const inspectedTrack = $derived(inspection && rideCourse?.tracks[inspection.order]);
   const dayDistance = $derived(inspection && inspectedTrack ? inspectedTrack.dayStart + inspection.distance - inspectedTrack.start : 0);
   const inspectedSample = $derived.by(() => {
-    const recording = inspection && recordings.get(inspection.order);
-    return typeof recording === 'object' ? rideSample(recording, dayDistance) : undefined;
+    if (!inspection) return;
+    const recording = recordings.get(inspection.order);
+    const { start, end } = inspection.window;
+    return typeof recording === 'object' ? rideSample(recording, dayDistance, end - start) : undefined;
   });
 
   function gesturePosition(event: MouseEvent | TouchEvent | undefined): ScreenPoint | undefined {
