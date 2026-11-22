@@ -62,7 +62,7 @@
       if (before && digit.test(before)) {
         const outgoing = incoming.cloneNode() as HTMLElement;
         outgoing.dataset.outgoing = '';
-        outgoing.textContent = before;
+        outgoing.dataset.character = before;
         reel.appendChild(outgoing);
         outgoing.animate([from, { transform: `translateY(${-direction * 75}%)`, opacity: 0 }], timing)
           .onfinish = () => outgoing.remove();
@@ -76,17 +76,17 @@
 </script>
 
 <span class="number">
-  <span class="accessible-value">{text}</span>
   <span class="reels" aria-hidden="true" bind:this={reels}>
     {#each characters as character, index (characters.length - index)}
-      <span class="reel" class:digit={digit.test(character)}><span class="glyph">{character}</span></span>
+      <span class="reel" class:digit={digit.test(character)}><span class="glyph" data-character={character}></span></span>
     {/each}
   </span>
+  <span class="formatted-value">{text}</span>
 </span>
 
 <style>
-  .number { white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .reels { display: inline-flex; }
+  .number { position: relative; display: inline-block; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .reels { display: inline-flex; -webkit-user-select: none; user-select: none; }
   .reel { position: relative; display: inline-grid; clip-path: inset(0 -.06em); text-align: center; }
   .digit::before {
     /* Reserve the widest digit even when the font lacks tabular figures. */
@@ -98,9 +98,10 @@
     white-space: pre;
   }
   .glyph { grid-area: 1 / 1; display: block; }
+  .glyph::before { content: attr(data-character); }
   .glyph:global([data-outgoing]) { position: absolute; inset: 0; }
-  .accessible-value {
-    position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden;
-    clip-path: inset(50%); white-space: nowrap;
+  .formatted-value {
+    /* Overlay the full string so it can be selected where the digits are shown. */
+    position: absolute; inset: 0; color: transparent; forced-color-adjust: none;
   }
 </style>
