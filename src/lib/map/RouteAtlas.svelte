@@ -44,8 +44,13 @@
       </button>
       {#if exploring}
         <p id="map-gesture" class="map-gesture">
-          <span class="mouse">Hover over the route · Click to pin</span>
-          <span class="touch">Tap the route for ride data</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m3 19 4-8 4 1m5-3 5-4" />
+            <circle cx="13.5" cy="11" r="3" fill="var(--color-route)" />
+          </svg>
+          <span class="mouse"><strong>Click the route line</strong> to pin ride data</span>
+          <span class="touch"><strong>Tap the route line</strong> to pin ride data</span>
         </p>
       {/if}
       <p class="map-key" aria-label="Route legend">
@@ -109,7 +114,20 @@
   .map-key span:first-child i { border-top: 3px solid #a27800; }
   .ferry i { border-top-style: dotted; }
   .official i { border-top-style: dashed; }
-  .map-gesture { bottom: 2.25rem; left: var(--edge); padding: .45rem .65rem; }
+  .map-gesture {
+    top: 1.35rem;
+    left: var(--edge);
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    max-width: calc(100% - 1.1rem);
+    padding: .45rem .65rem;
+    font-size: .8rem;
+    font-weight: 550;
+    line-height: 1.35;
+  }
+  .map-gesture svg { flex: none; }
+  .map-gesture strong { font-weight: 780; }
   .touch { display: none; }
 
   @media (hover: none) and (pointer: coarse) {
@@ -132,7 +150,7 @@
     .map-compass { top: .5rem; right: .75rem; }
     .explore { right: .55rem; bottom: 1.85rem; font-size: .76rem; }
     .map-key { display: none; }
-    .exploring .map-key { display: flex; inset: 8.9rem auto auto .55rem; max-width: 10rem; }
+    .exploring .map-key { display: flex; inset: 9.25rem auto auto .55rem; max-width: 10rem; }
     .map-gesture { inset: 6.7rem auto auto .55rem; }
   }
   @media print, (scripting: none) {
