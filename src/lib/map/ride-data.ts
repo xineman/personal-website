@@ -43,14 +43,16 @@ export function isRecordingGap(a: RideSample, b: RideSample) {
 }
 
 function averageSpeed(samples: RideSample[], index: number, distance: number, radius: number) {
+  const left = distance - radius;
+  const right = distance + radius;
   let total = 0;
   let weight = 0;
 
   function include(a: RideSample, b: RideSample) {
-    if (a[3] === null || b[3] === null) return;
-    const start = Math.max(a[0], distance - radius);
-    const end = Math.min(b[0], distance + radius);
-    if (end <= start) return;
+    if (a[3] === null || b[3] === null || isRecordingGap(a, b)) return false;
+    const start = Math.max(a[0], left);
+    const end = Math.min(b[0], right);
+    if (end <= start) return true;
 
     // Weight by distance covered and give the greatest influence to the selected point.
     const midpoint = (start + end) / 2;
@@ -58,16 +60,15 @@ function averageSpeed(samples: RideSample[], index: number, distance: number, ra
     const speed = a[3] + (b[3] - a[3]) * (midpoint - a[0]) / (b[0] - a[0]);
     total += speed * influence;
     weight += influence;
+    return true;
   }
 
-  // Walk outwards so a recording break bounds the average on either side.
-  for (let i = index; i > 0 && samples[i][0] > distance - radius; i--) {
-    if (isRecordingGap(samples[i - 1], samples[i])) break;
-    include(samples[i - 1], samples[i]);
+  // Walk outwards until a recording gap or a missing speed breaks the run.
+  for (let i = index; i > 0 && samples[i][0] > left; i--) {
+    if (!include(samples[i - 1], samples[i])) break;
   }
-  for (let i = index; i + 1 < samples.length && samples[i][0] < distance + radius; i++) {
-    if (isRecordingGap(samples[i], samples[i + 1])) break;
-    include(samples[i], samples[i + 1]);
+  for (let i = index; i + 1 < samples.length && samples[i][0] < right; i++) {
+    if (!include(samples[i], samples[i + 1])) break;
   }
   return weight > 0 ? total / weight : null;
 }
@@ -76,14 +77,16 @@ export function rideSample(data: RideData, distance: number, profileSpan = 0): R
   const { samples } = data;
   const index = indexAtDistance(samples, distance, (sample) => sample[0]);
   const next = samples[index];
+  if (!next) return;
   const previous = samples[index - 1];
   if (previous && distance < next[0] && isRecordingGap(previous, next)) return undefined;
-  const closest = previous && distance - previous[0] < next[0] - distance ? previous : next;
-  if (!closest || closest[3] === null) return closest;
+  const closestIndex = previous && distance - previous[0] < next[0] - distance ? index - 1 : index;
+  const closest = samples[closestIndex];
+  if (closest[3] === null) return closest;
 
   // Preserve local detail below a 10 km chart span, then widen the window gradually.
   const radius = Math.min(10_000, Math.max(0, profileSpan / 200 - 50));
-  let speed = radius > 0 ? averageSpeed(samples, index, distance, radius) : null;
+  let speed = radius > 0 ? averageSpeed(samples, closestIndex, distance, radius) : null;
   if (speed === null && previous && distance < next[0] && previous[3] !== null && next[3] !== null) {
     const fraction = (distance - previous[0]) / (next[0] - previous[0]);
     speed = previous[3] + fraction * (next[3] - previous[3]);
