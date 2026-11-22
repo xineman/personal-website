@@ -251,10 +251,12 @@
         <h1 id="cover-title">The long<br> way north</h1>
         <p>From the Italian Alps to the edge of Europe by bicycle.</p>
         <p class="ride-facts">≈3,825 km <span></span> 22 days <span></span> 2022</p>
-        <a class="cover__action" href={articleHidden ? '#route' : '#story'}>
-          {articleHidden ? 'View the route' : 'Read the story'}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m-5-5 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </a>
+        {#if !articleHidden}
+          <a class="cover__action" href="#story">
+            Read the story
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m-5-5 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+        {/if}
       </div>
     </div>
   </section>

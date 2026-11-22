@@ -43,9 +43,16 @@
         <span>N</span>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 6 20l6-4 6 4-6-16Zm0 1v11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
       </div>
-      <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
-        {exploring ? returnLabel : 'Explore map'}
-      </button>
+      <div class="map-actions">
+        <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
+          {exploring ? returnLabel : 'Explore map'}
+        </button>
+        <p class="map-key" aria-label="Route legend">
+          <span><i></i>{articleHidden ? 'Route' : 'Read'}</span>
+          {#if !articleHidden}<span><i></i>Ahead</span>{/if}
+          <span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
+        </p>
+      </div>
       {#if exploring}
         <p id="map-gesture" class="map-gesture">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -57,11 +64,6 @@
           <span class="touch"><strong>Tap the route line</strong> to pin ride data</span>
         </p>
       {/if}
-      <p class="map-key" aria-label="Route legend">
-        <span><i></i>{articleHidden ? 'Route' : 'Read'}</span>
-        {#if !articleHidden}<span><i></i>Ahead</span>{/if}
-        <span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
-      </p>
     {/if}
   </section>
 </aside>
@@ -79,12 +81,12 @@
   .map-sheet { position: absolute; inset: 0; overflow: hidden; }
   .exploring .map-sheet { position: fixed; inset: 0 0 auto; height: 100dvh; }
   .reading-status, .map-key, .map-gesture {
-    position: absolute;
     background: var(--color-paper);
     font-size: .75rem;
     font-weight: 650;
     pointer-events: none;
   }
+  .reading-status, .map-gesture { position: absolute; }
   .reading-status { top: 1.35rem; right: .85rem; width: 8.2rem; padding: .65rem .85rem .7rem; }
   .reading-status p { margin-top: .25rem; font-size: .81rem; line-height: 1.38; }
   .reading-value { display: flex; align-items: baseline; gap: .4rem; font-size: .87rem; font-weight: 750; }
@@ -100,9 +102,6 @@
     pointer-events: none;
   }
   .explore {
-    position: absolute;
-    right: 1.25rem;
-    bottom: 2.25rem;
     min-height: 2.75rem;
     padding: .45rem .75rem;
     border: 1px solid var(--color-ink);
@@ -114,7 +113,7 @@
   }
   .explore:hover { background: var(--color-route); }
   .explore:focus-visible { outline-offset: -4px; }
-  .map-key { display: flex; flex-wrap: wrap; gap: .35rem .8rem; right: 10rem; bottom: 2.25rem; padding: .35rem .65rem; }
+  .map-key { display: flex; flex-wrap: wrap; gap: .35rem .8rem; padding: .35rem .65rem; }
   .map-key span { display: inline-flex; align-items: center; gap: .33rem; }
   .map-key i { width: .9rem; border-top: 2px solid var(--color-unread); }
   .map-key span:first-child i { border-top: 3px solid #a27800; }
@@ -142,11 +141,19 @@
   }
   @media (min-width: 1061px) {
     .atlas, .map-sheet { pointer-events: none; }
-    .explore { pointer-events: auto; }
+    .map-actions {
+      position: absolute;
+      inset: auto 1.25rem 2.25rem var(--edge);
+      display: flex;
+      flex-direction: row-reverse;
+      align-items: end;
+      gap: .75rem;
+    }
+    .explore { flex: none; pointer-events: auto; }
     .article-hidden .map-compass { top: 1.35rem; }
   }
   @media (min-width: 1181px) {
-    .panel-right:not(.exploring) .map-key { right: auto; left: var(--edge); }
+    .panel-right:not(.exploring) .map-key { margin-inline-end: auto; }
   }
   @media (max-width: 1060px) {
     .atlas { z-index: 2; height: var(--dock-height); min-height: 0; border-block: 1px solid var(--color-ink); }
@@ -156,9 +163,10 @@
     .reading-value { gap: .28rem; font-size: .72rem; }
     .reading-value span { font-size: 1.55rem; }
     .map-compass { top: .5rem; right: .75rem; }
-    .explore { right: .55rem; bottom: 1.85rem; font-size: .76rem; }
+    .map-actions { display: contents; }
+    .explore { position: absolute; right: .55rem; bottom: 1.85rem; font-size: .76rem; }
     .map-key { display: none; }
-    .exploring .map-key { display: flex; inset: 9.25rem auto auto .55rem; max-width: 10rem; }
+    .exploring .map-key { position: absolute; display: flex; inset: 9.25rem auto auto .55rem; max-width: 10rem; }
     .map-gesture { inset: 6.7rem auto auto .55rem; }
   }
   @media print {
