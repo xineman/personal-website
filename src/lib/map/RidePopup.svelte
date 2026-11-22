@@ -1,0 +1,299 @@
+<script lang="ts">
+  import { tick, untrack } from 'svelte';
+  import type { RouteData, ScreenPoint } from './route-data.js';
+  import { elevationAtDistance, type ElevationPoint, type RideSample, type RideWindow } from './ride-data.js';
+  import { placeRidePopup, popupLeader, type ScreenRect } from './ride-inspection.js';
+
+  interface Props {
+    day: number | undefined;
+    kind: RouteData['features'][number]['properties']['kind'];
+    dayDistance: number;
+    sample: RideSample | undefined;
+    distance: number;
+    window: RideWindow;
+    routeElevation: ElevationPoint[];
+    point: ScreenPoint;
+    viewport: Pick<ScreenRect, 'width' | 'height'>;
+    pinned: boolean;
+    keyboard: boolean;
+    onClear: () => void;
+    onScrub: (distance: number) => void;
+  }
+
+  let { day, kind, dayDistance, sample, distance, window, routeElevation, point, viewport, pinned, keyboard, onClear, onScrub }: Props = $props();
+  let panel = $state<HTMLElement>();
+  let clearButton = $state<HTMLButtonElement>();
+  let slider = $state<HTMLInputElement>();
+  let size = $state({ width: 0, height: 0 });
+  let obstacles = $state.raw<ScreenRect[]>([]);
+  let position = $state<ScreenPoint>();
+  let scrubWindow = $state.raw<RideWindow>();
+  let focused = false;
+  const id = $props.id();
+  const number = new Intl.NumberFormat('en');
+  const axisNumber = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+  const decimal = new Intl.NumberFormat('en', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  const clock = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
+
+  const elevation = $derived(elevationAtDistance(routeElevation, distance));
+  const readings = $derived([
+    { label: 'Estimated speed', value: sample?.[3] == null ? null : decimal.format(sample[3]), unit: 'km/h' },
+    { label: 'Elevation', value: elevation === null ? null : number.format(Math.round(elevation)), unit: 'm' },
+    { label: 'Heart rate', value: sample?.[4] == null ? null : number.format(sample[4]), unit: 'bpm' }
+  ].filter(({ value }) => value !== null));
+  const title = $derived(kind === 'ferry' ? 'Ferry crossing' :
+    kind === 'official' ? `Day ${day} · Official course` : `Day ${day} · km ${decimal.format(dayDistance / 1000)}`);
+  const time = $derived(kind === 'ride' && sample?.[2] != null ? `${clock.format(sample[2] * 1000)} UTC` : undefined);
+  const description = $derived([`Trip kilometer ${axisNumber.format(distance / 1000)}`,
+    ...readings.map(({ label, value, unit }) => `${label} ${value} ${unit}`), time].filter(Boolean).join(', '));
+
+  const plot = { left: 43, top: 10, right: 305, bottom: 64 };
+  const plotWidth = plot.right - plot.left;
+  const distanceTicks = $derived.by(() => {
+    const span = window.end - window.start;
+    if (span <= 0) return [];
+    const target = span / 4;
+    const magnitude = 10 ** Math.floor(Math.log10(target));
+    const step = ([1, 2, 2.5, 5, 10].find((multiple) => multiple * magnitude >= target) ?? 10) * magnitude;
+    const first = Math.ceil(window.start / step);
+    const last = Math.floor(window.end / step);
+    return Array.from({ length: last - first + 1 }, (_, index) => (first + index) * step);
+  });
+
+  // Draw the trip trace once. Crossing a day boundary only updates the viewport.
+  const trace = $derived.by(() => {
+    const segments: [number, number][][] = [[]];
+    let low = Infinity;
+    let high = -Infinity;
+    for (const [meters, elevation] of routeElevation) {
+      if (elevation === null) {
+        if (segments.at(-1)?.length) segments.push([]);
+        continue;
+      }
+      low = Math.min(low, elevation);
+      high = Math.max(high, elevation);
+      segments[segments.length - 1].push([meters, elevation]);
+    }
+    const floor = low - Math.max(10, (high - low) / 10);
+    return segments.filter((segment) => segment.length > 1).map((segment) => {
+      const line = 'M' + segment.map(([x, y]) => `${x} ${y}`).join('L');
+      return { line, fill: `${line}L${segment.at(-1)![0]} ${floor}H${segment[0][0]}Z` };
+    });
+  });
+
+  const chart = $derived.by(() => {
+    const { start, end, samples } = window;
+    if (end <= start || !trace.length) return undefined;
+    let low = Infinity;
+    let high = -Infinity;
+    function include(elevation: number | null) {
+      if (elevation === null) return;
+      low = Math.min(low, elevation);
+      high = Math.max(high, elevation);
+    }
+    // Include interpolated edges so the vertical scale doesn't jump as samples enter or leave.
+    include(elevationAtDistance(samples, start));
+    include(elevationAtDistance(samples, end));
+    for (const [meters, elevation] of samples) {
+      if (meters >= start && meters <= end) include(elevation);
+    }
+    const hasElevation = low !== Infinity;
+    const middle = hasElevation ? (low + high) / 2 : 0;
+    const half = hasElevation ? Math.max(10, (high - low) * .55) : 10;
+    const min = middle - half;
+    const xScale = plotWidth / (end - start);
+    const yScale = (plot.bottom - plot.top) / (2 * half);
+    const x = (meters: number) => plot.left + (meters - start) * xScale;
+    const y = (meters: number) => plot.bottom - (meters - min) * yScale;
+    const transform = `matrix(${xScale} 0 0 ${-yScale} ${plot.left - start * xScale} ${plot.bottom + min * yScale})`;
+    return { x, y, transform, ticks: hasElevation ? [middle + half, middle, min] : [] };
+  });
+
+  function scrubWithKey(event: KeyboardEvent) {
+    const direction = ['ArrowLeft', 'ArrowDown'].includes(event.key) ? -1 : ['ArrowRight', 'ArrowUp'].includes(event.key) ? 1 : 0;
+    if (!direction) return;
+    event.preventDefault();
+    const next = distance + direction * (window.end - window.start) / 100;
+    onScrub(Math.max(routeElevation[0][0], Math.min(routeElevation[routeElevation.length - 1][0], next)));
+  }
+
+  function endScrub() {
+    scrubWindow = undefined;
+  }
+
+  $effect(() => {
+    if (!panel || !viewport.width || !viewport.height) return;
+    const parent = panel.parentElement!;
+    function measure() {
+      if (!panel) return;
+      size = { width: panel.offsetWidth, height: panel.offsetHeight };
+      const origin = parent.getBoundingClientRect();
+      obstacles = Array.from(parent.parentElement!.querySelectorAll('.map-controls, .reading-status, .map-compass, .map-key, .map-gesture, .explore, .attribution'))
+        .map((element) => element.getBoundingClientRect())
+        .filter((bounds) => bounds.width && bounds.height)
+        .map((bounds) => ({
+          x: bounds.left - origin.left - 4, y: bounds.top - origin.top - 4,
+          width: bounds.width + 8, height: bounds.height + 8
+        }));
+    }
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  });
+
+  $effect(() => {
+    if (!size.width) return;
+    position = placeRidePopup(point, size, viewport, obstacles, untrack(() => position));
+  });
+
+  $effect(() => {
+    const control = slider ?? clearButton;
+    if (!keyboard) focused = false;
+    if (!keyboard || !position || !control || focused) return;
+    let cancelled = false;
+    void tick().then(() => {
+      if (cancelled) return;
+      control.focus({ preventScroll: true });
+      focused = document.activeElement === control;
+    });
+    return () => { cancelled = true; };
+  });
+
+  const leader = $derived(position && popupLeader(point, position, size.width, size.height));
+</script>
+
+<div class="ride-overlay">
+  <svg class="leader" viewBox="0 0 {viewport.width} {viewport.height}" aria-hidden="true">
+    {#if leader}
+      <path d={leader} stroke="var(--color-paper)" stroke-width="4.5" />
+      <path d={leader} stroke="var(--color-ink)" stroke-width="1.4" />
+    {/if}
+  </svg>
+  <span class="map-point" style:left="{point.x}px" style:top="{point.y}px" aria-hidden="true"></span>
+
+  <section class="ride-popup" class:pinned bind:this={panel} aria-label="Ride data"
+    inert={!pinned} style:left="{position?.x ?? 0}px" style:top="{position?.y ?? 0}px" style:visibility={position ? 'visible' : 'hidden'}>
+    <header class="ride-heading">
+      <strong>{title}</strong>
+      {#if time}<span>{time}</span>{/if}
+      {#if pinned && !chart}<button type="button" bind:this={clearButton} onclick={onClear}>Clear point</button>{/if}
+    </header>
+    {#if readings.length}
+      <dl class="readings" style:--reading-count={readings.length}>
+        {#each readings as { label, value, unit } (label)}
+          <div>
+            <dt>{label}</dt>
+            <dd>{value}<small>{unit}</small></dd>
+          </div>
+        {/each}
+      </dl>
+    {:else}
+      <p class="missing">No readings at this point.</p>
+    {/if}
+    {#if chart}
+      <div class="profile">
+        <header>
+          <strong>Elevation profile</strong>
+          {#if pinned}<button type="button" bind:this={clearButton} onclick={onClear}>Clear point</button>{/if}
+        </header>
+        <div class="plot">
+          <svg viewBox="0 0 312 84" role="img" aria-label="Elevation over the surrounding route">
+            <defs><clipPath id={id}><rect x={plot.left} y="0" width={plot.right - plot.left} height={plot.bottom + 1} /></clipPath></defs>
+            {#each chart.ticks as tick, index}
+              <text x="39" y={chart.y(tick) + 3} text-anchor="end">{number.format(Math.round(tick))}{index === 0 ? ' m' : ''}</text>
+              <path class="grid" d="M{plot.left} {chart.y(tick)}H{plot.right}" />
+            {/each}
+            {#each distanceTicks as tick (tick)}
+              {@const x = chart.x(tick)}
+              {@const opacity = Math.max(0, Math.min(1, (x - plot.left) / 22, (plot.right - x) / 22))}
+              <path class="grid distance-grid" d="M{x} {plot.top}V{plot.bottom}" style:opacity />
+              <text class="distance-tick" {x} y="79" text-anchor="middle" style:opacity>{axisNumber.format(tick / 1000)}</text>
+            {/each}
+            <g clip-path="url(#{id})">
+              <g class="profile-trace" transform={chart.transform}>
+                {#each trace as { line, fill }}
+                  <path class="terrain" d={fill} />
+                  <path class="elevation" d={line} vector-effect="non-scaling-stroke" />
+                {/each}
+              </g>
+            </g>
+            <path class="axis" d="M{plot.left} {plot.bottom}H{plot.right}" />
+            <text x="39" y="79" text-anchor="end">Trip km</text>
+            {#if !chart.ticks.length}
+              <text x={(plot.left + plot.right) / 2} y="36" text-anchor="middle">No elevation recorded</text>
+            {/if}
+            <path class="cursor" d="M{chart.x(distance)} 5V{plot.bottom}" />
+            {#if elevation !== null}
+              <circle class="chart-point" cx={chart.x(distance)} cy={chart.y(elevation)} r="4.3" />
+            {/if}
+          </svg>
+          {#if pinned}
+            <input type="range" min={(scrubWindow ?? window).start} max={(scrubWindow ?? window).end} step="any" value={distance} bind:this={slider}
+              aria-label="Point on the elevation profile" aria-valuetext={description}
+              onpointerdown={() => { scrubWindow = window; }} onpointerup={endScrub} onpointercancel={endScrub}
+              onlostpointercapture={endScrub} onblur={endScrub} onkeydown={scrubWithKey}
+              oninput={(event) => onScrub(event.currentTarget.valueAsNumber)} />
+          {/if}
+        </div>
+      </div>
+    {/if}
+  </section>
+</div>
+
+<style>
+  .ride-overlay { position: absolute; inset: 0; z-index: 1; pointer-events: none; color: var(--color-ink); }
+  .leader { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; }
+  .map-point {
+    position: absolute; width: 19px; height: 19px; z-index: 1; transform: translate(-50%, -50%);
+    border: 2px solid var(--color-ink); border-radius: 50%; outline: 3px solid var(--color-paper); background: var(--color-route);
+  }
+  .map-point::after { content: ''; position: absolute; inset: 5px; background: var(--color-ink); border-radius: 50%; }
+  .ride-popup {
+    position: absolute; width: min(21rem, calc(100% - 16px)); max-height: calc(100% - 16px);
+    overflow-y: auto; background: var(--color-paper); font-variant-numeric: tabular-nums;
+  }
+  .ride-popup.pinned { pointer-events: auto; }
+  .ride-heading {
+    display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; padding: .45rem .75rem;
+    background: var(--color-route); border-bottom: 1px solid var(--color-ink); font-size: .8rem;
+  }
+  .ride-heading strong { font-weight: 800; }
+  .ride-heading span { font-size: .72rem; font-weight: 700; white-space: nowrap; }
+  .readings, .missing { margin: 0; padding: .58rem .75rem .65rem; }
+  .readings { display: grid; grid-template-columns: 1.1fr 1fr .78fr; column-gap: .5rem; }
+  .readings:not(:has(> :nth-child(3))) { grid-template-columns: repeat(var(--reading-count), minmax(0, 1fr)); }
+  .readings > div { display: flex; flex-direction: column-reverse; gap: .2rem; }
+  dt, .missing { font-size: .69rem; font-weight: 670; }
+  dd { margin: 0; white-space: nowrap; font: 800 2.06rem/.98 var(--font-display); }
+  dd small { margin-left: .18rem; font: 690 .71rem/1 var(--font-ui); }
+  .profile { margin-inline: .75rem; padding-bottom: .34rem; border-top: 1px solid var(--color-rule); }
+  .profile header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.45rem; font-size: .72rem; }
+  .profile strong { font-weight: 780; }
+  button {
+    border: 0; background: none; color: inherit; margin: 0; padding: .2rem 0; min-height: 1.55rem;
+    font-size: .72rem; font-weight: 710; text-decoration: underline; text-underline-offset: .12em; cursor: pointer;
+  }
+  button:hover { color: #62496b; }
+  button:focus-visible { outline-offset: 2px; }
+  .plot { position: relative; }
+  .profile svg { display: block; width: 100%; height: auto; }
+  .profile text { fill: currentColor; font-size: 10.5px; font-weight: 690; }
+  .grid { fill: none; stroke: var(--color-rule); stroke-dasharray: 2 4; }
+  .distance-grid { stroke-width: .75; }
+  .terrain { fill: var(--color-map-water); fill-opacity: .55; }
+  .elevation { fill: none; stroke: var(--color-unread); stroke-width: 1.8; stroke-linejoin: round; }
+  .axis, .cursor { fill: none; stroke: currentColor; }
+  .chart-point { fill: var(--color-route); stroke: currentColor; stroke-width: 1.5; }
+  .plot input {
+    position: absolute; inset: 0 2% 18% 13%; width: 85%; height: 82%; opacity: 0; margin: 0; cursor: ew-resize;
+  }
+  .plot:has(input:focus-visible) { outline: 2px solid currentColor; outline-offset: 1px; }
+
+  @media (max-width: 639px) {
+    .ride-popup { width: min(19.25rem, calc(100% - 16px)); }
+    .readings { padding-inline: .65rem; gap: .35rem; }
+    dd { font-size: clamp(1.52rem, 7vw, 1.87rem); }
+    .profile button, .ride-heading button { min-height: 2rem; }
+  }
+</style>

@@ -44,8 +44,8 @@
       </button>
       {#if exploring}
         <p id="map-gesture" class="map-gesture">
-          <span class="mouse">Scroll to zoom · Drag to pan</span>
-          <span class="touch">Pinch to zoom · Drag to pan</span>
+          <span class="mouse">Hover over the route · Click to pin</span>
+          <span class="touch">Tap the route for ride data</span>
         </p>
       {/if}
       <p class="map-key" aria-label="Route legend">
