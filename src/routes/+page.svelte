@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { asset } from '$app/paths';
-  import { readArticleVisibility } from '#lib/flags.js';
   import RouteAtlas from '#lib/map/RouteAtlas.svelte';
   import type { ReadingPosition } from '#lib/map/route-progress.js';
   import type { MapFraming, ScreenPoint } from '#lib/map/route-data.js';
   import article from '../../content/article.json';
+  import type { PageProps } from './$types';
+
+  let { data }: PageProps = $props();
 
   type PhotoPlacement = { after: number; images: string[] };
   type Photo = (typeof article.images)[keyof typeof article.images];
@@ -17,7 +19,7 @@
   // With the flag on there is no reading position, so the atlas shows the completed route.
   const completeRide: ReadingPosition = { chapter: chapters.length, fraction: 1, percent: 100 };
 
-  let articleHidden = $state(false);
+  const articleHidden = $derived(data.articleHidden);
   let position = $state<ReadingPosition>({ chapter: -1, fraction: 0, percent: 0 });
   let framing = $state<MapFraming>();
   let scrollPosition = $state(0);
@@ -28,9 +30,9 @@
   let paperOffset = $state<string>();
   let cover: HTMLElement;
   let coverPaper: HTMLDivElement;
-  let intro: HTMLElement;
-  let journal: HTMLElement;
-  let afterword: HTMLElement;
+  let intro = $state<HTMLElement>();
+  let journal = $state<HTMLElement>();
+  let afterword = $state<HTMLElement>();
   let atlas = $state<HTMLElement>();
   let toggle = $state<HTMLButtonElement>();
   let sections: HTMLElement[] = [];
@@ -52,7 +54,7 @@
 
   function updateReading() {
     frame = undefined;
-    if (articleHidden || exploring || !atlas || !journal || !sections.length) return;
+    if (articleHidden || exploring || !atlas || !journal || !intro || !afterword || !sections.length) return;
     scrollPosition = window.scrollY;
     const page = document.documentElement;
     const maxScroll = page.scrollHeight - page.clientHeight;
@@ -124,7 +126,7 @@
     if (open) {
       readingScroll = window.scrollY;
       paperDockInset = docked.matches && atlas
-        ? Math.max(0, atlas.getBoundingClientRect().bottom - journal.getBoundingClientRect().top)
+        ? Math.max(0, atlas.getBoundingClientRect().bottom - (journal?.getBoundingClientRect().top ?? 0))
         : 0;
       positioningPaper = false;
       paperOffset = slideOffset(drag);
@@ -170,10 +172,6 @@
   }
 
   onMount(() => {
-    const controller = new AbortController();
-    void readArticleVisibility(controller.signal).then(({ hidden }) => {
-      if (!controller.signal.aborted) articleHidden = hidden;
-    });
     docked = matchMedia('(max-width: 1060px)');
     alternating = matchMedia('(min-width: 1181px)');
     reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -183,7 +181,6 @@
     resize.observe(document.body);
     scheduleReading();
     return () => {
-      controller.abort();
       resize.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.documentElement.classList.remove('is-map-exploring');
@@ -249,6 +246,7 @@
   <RouteAtlas {chapters} position={atlasPosition} {framing} {scrollPosition} {exploring} mapOnly={articleHidden} onExplore={setExploring}
     onReturnCamera={(offset) => { returnOffset = offset; }} onChapter={jumpToChapter} bind:element={atlas} bind:toggle />
 
+  {#if !articleHidden}
   <article class="journal" aria-labelledby="story" inert={exploring} bind:this={journal} style:--paper-dock-inset={`${paperDockInset}px`}>
     <section class="story-panel" aria-labelledby="story" bind:this={intro}>
       <div class="paper-surface">
@@ -283,6 +281,7 @@
       </div>
     </section>
   </article>
+  {/if}
 </main>
 
 {#if !articleHidden}

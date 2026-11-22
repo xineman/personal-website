@@ -1,2 +1,2 @@
-// Render the journal at build time and load the interactive map in the browser.
-export const prerender = true;
+// The flag decides the first paint, so the Worker renders the page per request.
+export const prerender = false;

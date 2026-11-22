@@ -1,6 +1,6 @@
 # NorthCape 4000
 
-A cycling journal and interactive GPX atlas for the 2022 NorthCape 4000. SvelteKit prerenders the journal and serves the route as a static GeoJSON file.
+A cycling journal and interactive GPX atlas for the 2022 NorthCape 4000. SvelteKit renders the journal on the Worker so its feature flag decides the first paint, and serves the route as a static GeoJSON file.
 
 ## Development
 
@@ -11,13 +11,13 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Run `bun run check` to type-check the application. Run `bun run build` to build and prerender the site, then use `bun run preview` to preview the production build.
+Run `bun run check` to type-check the application. Run `bun run build` to build the site, then use `bun run preview` to preview the production build.
 
 Run `bun run cf-typegen` after changing Wrangler bindings or compatibility settings, and commit the updated `worker-configuration.d.ts`.
 
 ## Feature flags
 
-The `personal-website` Flagship app holds the `hide-article` boolean flag. With the flag on, the page becomes an interactive route map: the journal, its reading progress and the chapter stops are hidden, while the cover heading and every map control remain. The journal stays prerendered; the browser asks `/flags.json` for the flag on load and hides the journal when it is on.
+The `personal-website` Flagship app holds the `hide-article` boolean flag. With the flag on, the page becomes an interactive route map: the journal, its reading progress and the chapter stops are hidden, while the cover heading and every map control remain. The flag is evaluated in the Worker before the page is rendered, so the map-only layout is already in the first response and the journal never flashes into view.
 
 Local development evaluates flags against the Flagship local store. Pull the app's flags once, then choose the variation before starting the dev server:
 
