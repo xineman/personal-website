@@ -232,8 +232,7 @@
   <a class="skip-link" href="#story" inert={exploring}>Skip to the story</a>
 {/if}
 <header class="masthead" inert={exploring}>
-  <a class="masthead__title" href="#top" aria-label="NorthCape 4000, top of page"
-    onclick={(event) => { if (articleHidden) { event.preventDefault(); mapTitleHidden = false; } }}>
+  <a class="masthead__title" href="#top" aria-label="NorthCape 4000, top of page">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 1v22M1 12h22M12 4.5l4 7.5-4 7.5-4-7.5Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M12 4.5 16 12h-4V4.5Z" fill="currentColor"/></svg>
     NorthCape 4000
   </a>
@@ -243,7 +242,7 @@
   <section class="cover" aria-labelledby="cover-title" inert={exploring || mapTitleHidden} bind:this={cover}>
     <div class="paper-surface" bind:this={coverPaper}>
       <div class="paper-content">
-        <h1 id="cover-title">The long<br> way north</h1>
+        <h1 id="cover-title" tabindex="-1">The long<br> way north</h1>
         <p>From the Italian Alps to the edge of Europe by bicycle.</p>
         <p class="ride-facts">≈3,825 km <span></span> 22 days <span></span> 2022</p>
         {#if !articleHidden}
@@ -256,9 +255,13 @@
     </div>
   </section>
 
-  <RouteAtlas {chapters} position={atlasPosition} {framing} {scrollPosition} {exploring} mapOnly={articleHidden} onExplore={setExploring}
+  <RouteAtlas {chapters} position={atlasPosition} {framing} {scrollPosition} {exploring} mapOnly={articleHidden} coverHidden={mapTitleHidden} onExplore={setExploring}
     onMapInteraction={() => { if (articleHidden && !matchMedia('(max-width: 1060px)').matches) mapTitleHidden = true; }}
-    onMapReset={() => { mapTitleHidden = false; }}
+    onMapReset={() => {
+      if (!mapTitleHidden) return;
+      mapTitleHidden = false;
+      void tick().then(() => document.getElementById('cover-title')?.focus({ preventScroll: true }));
+    }}
     onReturnCamera={(offset) => { returnOffset = offset; }} onChapter={jumpToChapter} bind:element={atlas} bind:toggle />
 
   {#if !articleHidden}

@@ -10,6 +10,7 @@
     scrollPosition: number;
     exploring: boolean;
     mapOnly: boolean;
+    coverHidden: boolean;
     onExplore: (open: boolean, drag?: ScreenPoint) => void;
     onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
@@ -19,17 +20,18 @@
     toggle?: HTMLButtonElement;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, mapOnly, onExplore, onReturnCamera, onChapter, onMapInteraction, onMapReset, element = $bindable(), toggle = $bindable() }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, mapOnly, coverHidden, onExplore, onReturnCamera, onChapter, onMapInteraction, onMapReset, element = $bindable(), toggle = $bindable() }: Props = $props();
   const active = $derived(chapters[Math.min(position.chapter, chapters.length - 1)]);
   const place = $derived(position.percent === 100 ? 'North Cape reached' : active?.title ?? 'Rovereto to North Cape');
   const onRight = $derived(!mapOnly && (position.chapter % 2 === 1 || position.chapter >= chapters.length));
   let ready = $state(false);
+  let mapComponent = $state<{ returnToCover: () => void }>();
 </script>
 
 <aside class="atlas" class:exploring class:map-only={mapOnly} class:panel-right={onRight} id="route" aria-label="Route" bind:this={element}>
   <section class="map-sheet" role={exploring ? 'dialog' : undefined} aria-modal={exploring ? true : undefined}
     aria-label="Interactive map of the ride" aria-describedby={exploring || mapOnly ? 'map-gesture' : undefined}>
-    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {mapOnly} {onExplore} {onReturnCamera} {onChapter} {onMapInteraction} {onMapReset} bind:ready />
+    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {mapOnly} {onExplore} {onReturnCamera} {onChapter} {onMapInteraction} {onMapReset} bind:this={mapComponent} bind:ready />
 
     {#if ready}
       {#if !mapOnly}
@@ -47,6 +49,10 @@
       {#if !mapOnly}
         <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
           {exploring ? 'Back to story' : 'Explore map'}
+        </button>
+      {:else if coverHidden}
+        <button class="explore" type="button" onclick={() => mapComponent?.returnToCover()} aria-expanded="true" bind:this={toggle}>
+          Back to the title
         </button>
       {/if}
       {#if exploring || mapOnly}
@@ -131,7 +137,6 @@
     .atlas, .map-sheet { pointer-events: none; }
     .explore { pointer-events: auto; }
     .atlas.map-only .map-compass { top: 1.35rem; }
-    .atlas.map-only .map-key { right: 1.25rem; }
   }
   /* With the journal hidden, the atlas is the page and takes pointer input everywhere. */
   .atlas.map-only, .atlas.map-only .map-sheet { pointer-events: auto; }

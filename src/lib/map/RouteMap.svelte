@@ -202,6 +202,13 @@
     if (target) map.easeTo({ ...target, duration: 280 });
   }
 
+  // Leaves map-only mode the way Escape does: close any pinned reading, refit the route, reveal the cover.
+  export function returnToCover() {
+    if (isInspectionPinned()) clearInspection(true);
+    if (map) fitRoute();
+    else onMapReset?.();
+  }
+
   function updateMarkers(instance: MapLibreMap) {
     if (!host) return;
     zoom = instance.getZoom();
@@ -610,8 +617,7 @@
                 clearInspection(true);
                 return;
               }
-              fitRoute();
-              onMapReset?.();
+              returnToCover();
               return;
             }
             if (!mode) return;
