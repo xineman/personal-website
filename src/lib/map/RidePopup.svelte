@@ -309,25 +309,22 @@
           onpointerdown={startScrub} onpointermove={moveScrub} onpointerup={endScrub}
           onpointercancel={endScrub} onlostpointercapture={endScrub}>
           <p class="profile-hint">
-            {#if pinned}
-              <span class="wheel-hint">
-                <svg viewBox="0 0 20 20" aria-hidden="true">
-                  <rect x="5" y="2" width="10" height="16" rx="5" /><path d="M10 5.5v3" />
-                </svg>
-                <span><strong>Scroll the chart</strong> to move along the route</span>
-              </span>
-              <span class="swipe-hint">
-                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h16M6 6l-4 4 4 4m8-8 4 4-4 4" /></svg>
-                <span><strong>Swipe left or right</strong> to follow the route</span>
-              </span>
-            {:else}
-              <span>
-                <svg viewBox="0 0 20 20" aria-hidden="true">
-                  <path fill="var(--color-route)" d="M10 18s5-5.2 5-9a5 5 0 0 0-10 0c0 3.8 5 9 5 9Z" /><circle cx="10" cy="9" r="1.4" />
-                </svg>
-                <span><strong>Click this point on the map</strong> to pin the popup</span>
-              </span>
-            {/if}
+            <span class="pin-hint">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path fill="var(--color-route)" d="M10 18s5-5.2 5-9a5 5 0 0 0-10 0c0 3.8 5 9 5 9Z" /><circle cx="10" cy="9" r="1.4" />
+              </svg>
+              <span><strong>Click the marked point</strong> to pin the popup</span>
+            </span>
+            <span class="wheel-hint">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <rect x="5" y="2" width="10" height="16" rx="5" /><path d="M10 5.5v3" />
+              </svg>
+              <span><strong>Scroll the chart</strong> to move along the route</span>
+            </span>
+            <span class="swipe-hint">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h16M6 6l-4 4 4 4m8-8 4 4-4 4" /></svg>
+              <span><strong>Swipe left or right</strong> to follow the route</span>
+            </span>
           </p>
           <div class="chart">
             <svg viewBox="0 0 312 84" role="img" aria-label="Elevation over the surrounding route">
@@ -384,6 +381,7 @@
   }
   .map-point::after { content: ''; position: absolute; inset: 5px; background: var(--color-ink); border-radius: 50%; }
   .ride-popup {
+    --clear-point-height: 1.55rem;
     position: absolute; width: min(21rem, calc(100% - 16px)); max-height: calc(100% - 16px);
     overflow-y: auto; background: var(--color-paper); font-variant-numeric: tabular-nums;
   }
@@ -421,10 +419,10 @@
     .scaled-value { transform: none; }
   }
   .profile { margin-inline: .75rem; padding-bottom: .34rem; border-top: 1px solid var(--color-rule); }
-  .profile header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.45rem; font-size: .72rem; }
+  .profile header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: var(--clear-point-height); font-size: .72rem; }
   .profile strong { font-weight: 780; }
   button {
-    border: 0; background: none; color: inherit; margin: 0; padding: .2rem 0; min-height: 1.55rem;
+    border: 0; background: none; color: inherit; margin: 0; padding: .2rem 0; min-height: var(--clear-point-height);
     font-size: .72rem; font-weight: 710; text-decoration: underline; text-underline-offset: .12em; cursor: pointer;
   }
   button:hover { color: #62496b; }
@@ -445,13 +443,17 @@
   .plot:has(input) { touch-action: pan-y pinch-zoom; user-select: none; }
   .plot:has(input:focus-visible) { outline: 2px solid currentColor; outline-offset: 1px; }
   .profile-hint {
+    display: grid;
     margin-bottom: .23rem;
     padding: .3rem .4rem;
     background: color-mix(in srgb, var(--color-map-water) 35%, var(--color-paper));
     font-size: .75rem;
     line-height: 1.35;
   }
-  .profile-hint > span { display: flex; align-items: center; gap: .35rem; }
+  /* Both hints size the same row so wrapping cannot move the chart when pinning. */
+  .profile-hint > span { grid-area: 1 / 1; display: flex; align-items: center; gap: .35rem; }
+  .ride-popup:not(.pinned) .profile-hint > :not(.pin-hint),
+  .pinned .profile-hint > .pin-hint { visibility: hidden; }
   .profile-hint svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   .profile-hint > .swipe-hint { display: none; }
 
@@ -461,9 +463,8 @@
   }
 
   @media (max-width: 639px) {
-    .ride-popup { width: min(19.25rem, calc(100% - 16px)); }
+    .ride-popup { --clear-point-height: 2rem; width: min(19.25rem, calc(100% - 16px)); }
     .readings, .missing { --reading-value-size: clamp(1.52rem, 7vw, 1.87rem); padding-inline: .65rem; }
     .readings { column-gap: .35rem; }
-    .profile button, .ride-heading button { min-height: 2rem; }
   }
 </style>
