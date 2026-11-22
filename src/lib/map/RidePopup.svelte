@@ -80,7 +80,7 @@
 
   const elevation = $derived(elevationAtDistance(routeElevation, distance));
   const readings = $derived([
-    { label: 'Estimated speed', value: sample?.[3] == null ? null : Math.round(sample[3]), unit: 'km/h', maxAnimatedDelta: 5, scaleRange: 50 },
+    { label: 'Speed', value: sample?.[3] == null ? null : Math.round(sample[3]), unit: 'km/h', maxAnimatedDelta: 5, scaleRange: 50 },
     { label: 'Elevation', value: elevation === null ? null : Math.round(elevation), unit: 'm', maxAnimatedDelta: 30, scaleRange: 1000 },
     { label: 'Heart rate', value: sample?.[4] ?? null, unit: 'bpm' }
   ].filter((reading): reading is typeof reading & { value: number } => reading.value !== null));
@@ -308,46 +308,68 @@
         <div class="plot" role="group" aria-label="Elevation profile" bind:this={plotElement}
           onpointerdown={startScrub} onpointermove={moveScrub} onpointerup={endScrub}
           onpointercancel={endScrub} onlostpointercapture={endScrub}>
-          <svg viewBox="0 0 312 84" role="img" aria-label="Elevation over the surrounding route">
-            <defs><clipPath id={id}><rect x={plot.left} y="0" width={plot.right - plot.left} height={plot.bottom + 1} /></clipPath></defs>
-            {#each chart.ticks as tick, index}
-              <text x="39" y={chart.y(tick) + 3} text-anchor="end">{number.format(Math.round(tick))}{index === 0 ? ' m' : ''}</text>
-              <path class="grid" d="M{plot.left} {chart.y(tick)}H{plot.right}" />
-            {/each}
-            {#each distanceTicks as tick (tick)}
-              {@const x = chart.x(tick)}
-              {@const opacity = Math.max(0, Math.min(1, (x - plot.left) / 22, (plot.right - x) / 22))}
-              <path class="grid distance-grid" d="M{x} {plot.top}V{plot.bottom}" style:opacity />
-              <text class="distance-tick" {x} y="79" text-anchor="middle" style:opacity>{axisNumber.format(tick / 1000)}</text>
-            {/each}
-            <g clip-path="url(#{id})">
-              <g class="profile-trace" transform={chart.transform}>
-                {#each trace as { line, fill }}
-                  <path class="terrain" d={fill} />
-                  <path class="elevation" d={line} vector-effect="non-scaling-stroke" />
-                {/each}
+          <p class="profile-hint">
+            {#if pinned}
+              <span class="wheel-hint">
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <rect x="5" y="2" width="10" height="16" rx="5" /><path d="M10 5.5v3" />
+                </svg>
+                <span><strong>Scroll the chart</strong> to move along the route</span>
+              </span>
+              <span class="swipe-hint">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h16M6 6l-4 4 4 4m8-8 4 4-4 4" /></svg>
+                <span><strong>Swipe left or right</strong> to follow the route</span>
+              </span>
+            {:else}
+              <span>
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <path fill="var(--color-route)" d="M10 18s5-5.2 5-9a5 5 0 0 0-10 0c0 3.8 5 9 5 9Z" /><circle cx="10" cy="9" r="1.4" />
+                </svg>
+                <span><strong>Click this point on the map</strong> to pin the popup</span>
+              </span>
+            {/if}
+          </p>
+          <div class="chart">
+            <svg viewBox="0 0 312 84" role="img" aria-label="Elevation over the surrounding route">
+              <defs><clipPath id={id}><rect x={plot.left} y="0" width={plot.right - plot.left} height={plot.bottom + 1} /></clipPath></defs>
+              {#each chart.ticks as tick, index}
+                <text x="39" y={chart.y(tick) + 3} text-anchor="end">{number.format(Math.round(tick))}{index === 0 ? ' m' : ''}</text>
+                <path class="grid" d="M{plot.left} {chart.y(tick)}H{plot.right}" />
+              {/each}
+              {#each distanceTicks as tick (tick)}
+                {@const x = chart.x(tick)}
+                {@const opacity = Math.max(0, Math.min(1, (x - plot.left) / 22, (plot.right - x) / 22))}
+                <path class="grid distance-grid" d="M{x} {plot.top}V{plot.bottom}" style:opacity />
+                <text class="distance-tick" {x} y="79" text-anchor="middle" style:opacity>{axisNumber.format(tick / 1000)}</text>
+              {/each}
+              <g clip-path="url(#{id})">
+                <g class="profile-trace" transform={chart.transform}>
+                  {#each trace as { line, fill }}
+                    <path class="terrain" d={fill} />
+                    <path class="elevation" d={line} vector-effect="non-scaling-stroke" />
+                  {/each}
+                </g>
               </g>
-            </g>
-            <path class="axis" d="M{plot.left} {plot.bottom}H{plot.right}" />
-            <text x="39" y="79" text-anchor="end">Trip km</text>
-            {#if !chart.ticks.length}
-              <text x={(plot.left + plot.right) / 2} y="36" text-anchor="middle">No elevation recorded</text>
+              <path class="axis" d="M{plot.left} {plot.bottom}H{plot.right}" />
+              <text x="39" y="79" text-anchor="end">Trip km</text>
+              {#if !chart.ticks.length}
+                <text x={(plot.left + plot.right) / 2} y="36" text-anchor="middle">No elevation recorded</text>
+              {/if}
+              <path class="cursor" d="M{chart.x(distance)} 5V{plot.bottom}" />
+              {#if elevation !== null}
+                <circle class="chart-point" cx={chart.x(distance)} cy={chart.y(elevation)} r="4.3" />
+              {/if}
+            </svg>
+            {#if pinned}
+              <span id="{id}-keys" hidden>Use the arrow keys to move along the route.</span>
+              <input type="range" min={window.start} max={window.end} step="any" value={distance} bind:this={slider}
+                aria-label="Point on the elevation profile" aria-valuetext={description}
+                aria-describedby="{id}-keys"
+                onkeydown={scrubWithKey}
+                oninput={(event) => scrubTo(event.currentTarget.valueAsNumber)} />
             {/if}
-            <path class="cursor" d="M{chart.x(distance)} 5V{plot.bottom}" />
-            {#if elevation !== null}
-              <circle class="chart-point" cx={chart.x(distance)} cy={chart.y(elevation)} r="4.3" />
-            {/if}
-          </svg>
-          {#if pinned}
-            <input type="range" min={window.start} max={window.end} step="any" value={distance} bind:this={slider}
-              aria-label="Point on the elevation profile" aria-valuetext={description}
-              onkeydown={scrubWithKey}
-              oninput={(event) => scrubTo(event.currentTarget.valueAsNumber)} />
-          {/if}
+          </div>
         </div>
-        {#if pinned}
-          <p class="scrub-hint"><span>Scroll to move along the route</span><span>Swipe left or right to move along the route</span></p>
-        {/if}
       </div>
     {/if}
   </section>
@@ -407,8 +429,8 @@
   }
   button:hover { color: #62496b; }
   button:focus-visible { outline-offset: 2px; }
-  .plot { position: relative; }
-  .profile svg { display: block; width: 100%; height: auto; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; }
   .profile text { fill: currentColor; font-size: 10.5px; font-weight: 690; }
   .grid { fill: none; stroke: var(--color-rule); stroke-dasharray: 2 4; }
   .distance-grid { stroke-width: .75; }
@@ -416,18 +438,26 @@
   .elevation { fill: none; stroke: var(--color-unread); stroke-width: 1.8; stroke-linejoin: round; }
   .axis, .cursor { fill: none; stroke: currentColor; }
   .chart-point { fill: var(--color-route); stroke: currentColor; stroke-width: 1.5; }
-  .plot input {
+  .chart input {
     position: absolute; inset: 0 2% 18% 13%; width: 85%; height: 82%; opacity: 0; margin: 0;
     pointer-events: none;
   }
   .plot:has(input) { touch-action: pan-y pinch-zoom; user-select: none; }
   .plot:has(input:focus-visible) { outline: 2px solid currentColor; outline-offset: 1px; }
-  .scrub-hint { margin: .18rem 0 0; font-size: .69rem; }
-  .scrub-hint span + span { display: none; }
+  .profile-hint {
+    margin-bottom: .23rem;
+    padding: .3rem .4rem;
+    background: color-mix(in srgb, var(--color-map-water) 35%, var(--color-paper));
+    font-size: .75rem;
+    line-height: 1.35;
+  }
+  .profile-hint > span { display: flex; align-items: center; gap: .35rem; }
+  .profile-hint svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .profile-hint > .swipe-hint { display: none; }
 
   @media (hover: none) and (pointer: coarse) {
-    .scrub-hint span { display: none; }
-    .scrub-hint span + span { display: inline; }
+    .profile-hint > .wheel-hint { display: none; }
+    .profile-hint > .swipe-hint { display: flex; }
   }
 
   @media (max-width: 639px) {

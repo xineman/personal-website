@@ -133,6 +133,7 @@
 
   function setMapMode(instance: MapLibreMap, open: boolean) {
     mode = open;
+    instance.getCanvas().style.cursor = '';
     instance.getCanvas().setAttribute('aria-label', open
       ? 'Route map. Use arrow keys to pan, plus or minus to zoom, and Enter to inspect the nearest route point.'
       : 'Route map. Use arrow keys to pan and plus or minus to zoom.');
@@ -501,6 +502,7 @@
 
         let hoverPoint: ScreenPoint | undefined;
         function stopHover() {
+          if (mode) instance.getCanvas().style.cursor = '';
           hoverPoint = undefined;
           if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
           hoverFrame = undefined;
@@ -559,7 +561,7 @@
               hoverFrame = undefined;
               if (!hoverPoint || !mode || isInspectionPinned() || instance.isMoving()) return;
               const hit = inspectAt(hoverPoint, 9);
-              instance.getCanvas().style.cursor = hit ? 'crosshair' : '';
+              instance.getCanvas().style.cursor = hit ? 'pointer' : '';
               if (hit) void inspect(hit, 'hover');
               else clearInspection();
             });
