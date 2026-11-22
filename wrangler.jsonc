@@ -12,7 +12,11 @@
   },
   "workers_dev": true,
   "preview_urls": true,
-  "previews": {},
+  "previews": {
+    "flagship": [
+      { "binding": "FLAGS", "app_id": "92434a89-72bc-40cd-af9d-223277baf956" }
+    ]
+  },
   "observability": {
     "enabled": true
   }
