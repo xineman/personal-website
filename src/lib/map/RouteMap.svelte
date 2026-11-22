@@ -25,13 +25,14 @@
     framing: MapFraming | undefined;
     scrollPosition: number;
     exploring: boolean;
+    articleHidden: boolean;
     onExplore: (open: boolean, drag?: ScreenPoint) => void;
     onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
     ready: boolean;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, onExplore, onReturnCamera, onChapter, ready = $bindable(false) }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, articleHidden, onExplore, onReturnCamera, onChapter, ready = $bindable(false) }: Props = $props();
   let host: HTMLDivElement;
   let map: MapLibreMap | undefined;
   let routeBounds: LngLatBounds;
@@ -324,7 +325,7 @@
     });
     if (coordinate) tip?.setLngLat(coordinate);
 
-    const active = chapters[Math.min(current.chapter, chapters.length - 1)]?.id;
+    const active = articleHidden ? undefined : chapters[Math.min(current.chapter, chapters.length - 1)]?.id;
     for (const { id, marker } of pins) {
       const element = marker.getElement();
       if (id === active) element.setAttribute('aria-current', 'location');
@@ -517,34 +518,41 @@
 
         instance.once('load', () => {
           for (const [index, chapter] of chapters.entries()) {
-            const link = document.createElement('a');
-            link.className = 'chapter-pin';
-            link.classList.toggle('chapter-pin--endpoint', index === 0 || index === chapters.length - 1);
-            link.dataset.labelSide = index === 0 ? 'right' : chapter.labelSide;
-            link.href = '#' + chapter.id;
-            link.setAttribute('aria-label', `${chapter.pin}, ${chapter.title}`);
+            const pin: HTMLElement = document.createElement(articleHidden ? 'button' : 'a');
+            const coordinates: [number, number] = [chapter.coordinates[0], chapter.coordinates[1]];
+            pin.className = 'chapter-pin';
+            pin.classList.toggle('chapter-pin--endpoint', index === 0 || index === chapters.length - 1);
+            pin.dataset.labelSide = index === 0 ? 'right' : chapter.labelSide;
+            if (pin instanceof HTMLAnchorElement) pin.href = '#' + chapter.id;
+            if (pin instanceof HTMLButtonElement) pin.type = 'button';
+            pin.setAttribute('aria-label', articleHidden ? `Inspect the route near ${chapter.pin}` : `${chapter.pin}, ${chapter.title}`);
 
             const disc = document.createElement('span');
             disc.className = 'chapter-pin__disc';
             const label = document.createElement('span');
             label.className = 'chapter-pin__label';
             label.textContent = chapter.pin;
-            link.appendChild(disc);
-            link.appendChild(label);
+            pin.appendChild(disc);
+            pin.appendChild(label);
 
-            link.addEventListener('click', (event) => {
+            pin.addEventListener('click', (event) => {
+              if (articleHidden) {
+                const hit = inspectAt(instance.project(coordinates), 36);
+                if (!mode) onExplore(true);
+                if (hit) void inspect(hit, event.detail ? 'pointer' : 'keyboard');
+                return;
+              }
               if (event.button || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
               event.preventDefault();
               onChapter(chapter.id);
             });
 
-            const [lon, lat] = chapter.coordinates;
-            const marker = new lib.Marker({ element: link }).setLngLat([lon, lat]).addTo(instance);
+            const marker = new lib.Marker({ element: pin }).setLngLat(coordinates).addTo(instance);
             pins.push({ id: chapter.id, marker });
           }
 
           const coordinate = course.reveal(position).tip;
-          if (coordinate) {
+          if (!articleHidden && coordinate) {
             const element = document.createElement('span');
             element.className = 'route-tip';
             element.setAttribute('aria-hidden', 'true');
@@ -552,13 +560,13 @@
           }
 
           instance.on('mousemove', (event) => {
-            const overLink = (event.originalEvent.target as Element).closest('a');
+            const overPin = (event.originalEvent.target as Element).closest('.chapter-pin');
             if (!mode) {
-              instance.getCanvas().style.cursor = !overLink && routeAt(event.point)?.chapterId ? 'pointer' : '';
+              instance.getCanvas().style.cursor = !overPin && routeAt(event.point)?.chapterId ? 'pointer' : '';
               return;
             }
             if (isInspectionPinned() || instance.isMoving()) return;
-            if (overLink) {
+            if (overPin) {
               stopHover();
               clearInspection();
               return;
@@ -578,16 +586,18 @@
             if (!isInspectionPinned()) clearInspection();
           });
           instance.on('click', (event) => {
-            if ((event.originalEvent.target as Element).closest('a')) return;
-            if (mode) {
+            if ((event.originalEvent.target as Element).closest('.chapter-pin')) return;
+            if (mode || articleHidden) {
               stopHover();
               const hit = inspectAt(event.point, 16);
               if (hit) {
+                if (!mode) onExplore(true);
                 void inspect(hit, 'pointer');
                 return;
               }
               clearInspection();
             }
+            if (articleHidden) return;
             const feature = routeAt(event.point);
             if (mode && feature?.telemetry && route.elevationProfile) return;
             if (feature?.chapterId) onChapter(feature.chapterId);
@@ -736,7 +746,7 @@
 {:else}
   <p class="map-status" role="status">
     {#if unavailable}
-      The map couldn’t load. <a href="#chapters">Browse the chapters.</a>
+      The map couldn’t load. {#if !articleHidden}<a href="#chapters">Browse the chapters.</a>{/if}
     {:else}
       Loading route map…
     {/if}
@@ -758,6 +768,7 @@
     color: var(--color-ink);
     text-decoration: none;
   }
+  .map-host :global(button.chapter-pin) { padding: 0; border: 0; background: none; cursor: pointer; }
   .map-host :global(.chapter-pin:hover),
   .map-host :global(.chapter-pin:focus-visible),
   .map-host :global(.chapter-pin[aria-current]) { z-index: 1; }

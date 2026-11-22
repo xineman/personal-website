@@ -1,6 +1,6 @@
 # NorthCape 4000
 
-A cycling journal and interactive GPX atlas for the 2022 NorthCape 4000. SvelteKit prerenders the journal and serves the route as a static GeoJSON file.
+A cycling journal and interactive GPX atlas for the 2022 NorthCape 4000. SvelteKit renders the journal on Cloudflare Workers and serves the route as a static GeoJSON file.
 
 ## Development
 
@@ -11,9 +11,11 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Run `bun run check` to type-check the application. Run `bun run build` to build and prerender the site, then use `bun run preview` to preview the production build.
+Run `bun run check` to type-check the application. Run `bun run build` to build the site, then use `bun run preview` to preview the production build locally.
 
 Run `bun run cf-typegen` after changing Wrangler bindings or compatibility settings, and commit the updated `worker-configuration.d.ts`.
+
+The Worker and Cloudflare branch previews read the `hide-article` flag from the existing Flagship app on each request. When the flag is on, the cover and interactive route remain visible. Wrangler uses a local flag store for development and defaults to showing the journal when the flag has no value.
 
 The journal lives in `content/`. Development and production builds generate `static/route.geojson` and the on-demand ride readings in `static/route-telemetry/`. Run `bun run generate:route` to refresh them after changing the GPX tracks in `data/northcape-4000/gpx/` or the day ranges in `content/article.json`. Commit the updated GeoJSON alongside those changes.
 

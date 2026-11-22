@@ -9,6 +9,7 @@
     framing: MapFraming | undefined;
     scrollPosition: number;
     exploring: boolean;
+    articleHidden: boolean;
     onExplore: (open: boolean, drag?: ScreenPoint) => void;
     onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
@@ -16,31 +17,34 @@
     toggle?: HTMLButtonElement;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, onExplore, onReturnCamera, onChapter, element = $bindable(), toggle = $bindable() }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, articleHidden, onExplore, onReturnCamera, onChapter, element = $bindable(), toggle = $bindable() }: Props = $props();
   const active = $derived(chapters[Math.min(position.chapter, chapters.length - 1)]);
   const place = $derived(position.percent === 100 ? 'North Cape reached' : active?.title ?? 'Rovereto to North Cape');
-  const onRight = $derived(position.chapter % 2 === 1 || position.chapter >= chapters.length);
+  const onRight = $derived(!articleHidden && (position.chapter % 2 === 1 || position.chapter >= chapters.length));
+  const returnLabel = $derived(articleHidden ? 'Back to overview' : 'Back to story');
   let ready = $state(false);
 </script>
 
-<aside class="atlas" class:exploring class:panel-right={onRight} id="route" aria-label="Route" bind:this={element}>
+<aside class="atlas" class:exploring class:article-hidden={articleHidden} class:panel-right={onRight} id="route" tabindex="-1" aria-label="Route" bind:this={element}>
   <section class="map-sheet" role={exploring ? 'dialog' : undefined} aria-modal={exploring ? true : undefined}
     aria-label="Interactive map of the ride" aria-describedby={exploring ? 'map-gesture' : undefined}>
-    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {onExplore} {onReturnCamera} {onChapter} bind:ready />
+    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {articleHidden} {onExplore} {onReturnCamera} {onChapter} bind:ready />
 
     {#if ready}
-      <div class="reading-status">
-        <div class="reading-value" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={position.percent}>
-          <span>{position.percent}%</span> read
+      {#if !articleHidden}
+        <div class="reading-status">
+          <div class="reading-value" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={position.percent}>
+            <span>{position.percent}%</span> read
+          </div>
+          <p>{place}</p>
         </div>
-        <p>{place}</p>
-      </div>
+      {/if}
       <div class="map-compass" aria-label="North is up">
         <span>N</span>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 6 20l6-4 6 4-6-16Zm0 1v11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
       </div>
       <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
-        {exploring ? 'Back to story' : 'Explore map'}
+        {exploring ? returnLabel : 'Explore map'}
       </button>
       {#if exploring}
         <p id="map-gesture" class="map-gesture">
@@ -54,7 +58,9 @@
         </p>
       {/if}
       <p class="map-key" aria-label="Route legend">
-        <span><i></i>Read</span><span><i></i>Ahead</span><span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
+        <span><i></i>{articleHidden ? 'Route' : 'Read'}</span>
+        {#if !articleHidden}<span><i></i>Ahead</span>{/if}
+        <span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
       </p>
     {/if}
   </section>
@@ -137,12 +143,14 @@
   @media (min-width: 1061px) {
     .atlas, .map-sheet { pointer-events: none; }
     .explore { pointer-events: auto; }
+    .article-hidden .map-compass { top: 1.35rem; }
   }
   @media (min-width: 1181px) {
     .panel-right:not(.exploring) .map-key { right: auto; left: var(--edge); }
   }
   @media (max-width: 1060px) {
     .atlas { z-index: 2; height: var(--dock-height); min-height: 0; border-block: 1px solid var(--color-ink); }
+    .atlas.article-hidden { flex: 1 0 auto; align-self: stretch; min-height: 20rem; }
     .reading-status { top: .55rem; right: auto; left: .55rem; width: max-content; max-width: 32%; padding: .4rem .5rem; }
     .reading-status p { font-size: .665rem; }
     .reading-value { gap: .28rem; font-size: .72rem; }

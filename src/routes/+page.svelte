@@ -6,6 +6,10 @@
   import type { ReadingPosition } from '#lib/map/route-progress.js';
   import type { MapFraming, ScreenPoint } from '#lib/map/route-data.js';
   import article from '../../content/article.json';
+  import type { PageProps } from './$types';
+
+  let { data }: PageProps = $props();
+  const articleHidden = $derived(data.articleHidden);
 
   type PhotoPlacement = { after: number; images: string[] };
   type Photo = (typeof article.images)[keyof typeof article.images];
@@ -13,6 +17,7 @@
   const photosByKey: Readonly<Record<string, Photo | undefined>> = article.images;
   const day = (number: number) => String(number).padStart(2, '0');
   const chapters = article.chapters.map((chapter, index) => ({ ...chapter, number: day(index + 1) }));
+  const completedRide: ReadingPosition = { chapter: chapters.length, fraction: 1, percent: 100 };
   const clamp = (value: number) => Math.max(0, Math.min(1, value));
 
   let position = $state<ReadingPosition>({ chapter: -1, fraction: 0, percent: 0 });
@@ -26,9 +31,9 @@
   let paperOffset = $state<string>();
   let cover: HTMLElement;
   let coverPaper: HTMLDivElement;
-  let intro: HTMLElement;
-  let journal: HTMLElement;
-  let afterword: HTMLElement;
+  let intro = $state<HTMLElement>();
+  let journal = $state<HTMLElement>();
+  let afterword = $state<HTMLElement>();
   let atlas = $state<HTMLElement>();
   let toggle = $state<HTMLButtonElement>();
   let sections: HTMLElement[] = [];
@@ -48,7 +53,17 @@
 
   function updateReading() {
     frame = undefined;
-    if (exploring || !atlas || !sections.length) return;
+    if (exploring || !atlas) return;
+    if (articleHidden) {
+      const right = cover.getBoundingClientRect().right + 22;
+      const lane = document.documentElement.clientWidth - 104 - right;
+      const next = docked.matches ? undefined : {
+        center: Math.round(right + lane / 2), width: Math.max(100, Math.floor(lane - 72))
+      };
+      if (framing?.center !== next?.center || framing?.width !== next?.width) framing = next;
+      return;
+    }
+    if (!journal || !intro || !afterword || !sections.length) return;
     scrollPosition = window.scrollY;
     const page = document.documentElement;
     const maxScroll = page.scrollHeight - page.clientHeight;
@@ -119,7 +134,7 @@
     returnOffset = undefined;
     if (open) {
       readingScroll = window.scrollY;
-      paperDockInset = docked.matches && atlas
+      paperDockInset = docked.matches && atlas && journal
         ? Math.max(0, atlas.getBoundingClientRect().bottom - journal.getBoundingClientRect().top)
         : 0;
       positioningPaper = false;
@@ -176,9 +191,9 @@
     docked = matchMedia('(max-width: 1060px)');
     alternating = matchMedia('(min-width: 1181px)');
     reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-    sections = Array.from(journal.querySelectorAll<HTMLElement>('[data-chapter]'));
+    sections = Array.from(journal?.querySelectorAll<HTMLElement>('[data-chapter]') ?? []);
     const resize = new ResizeObserver(scheduleReading);
-    resize.observe(journal);
+    if (journal) resize.observe(journal);
     resize.observe(document.body);
     scheduleReading();
     return () => {
@@ -191,7 +206,9 @@
 
 <svelte:head>
   <title>NorthCape 4000 — The long way north</title>
-  <meta name="description" content="A firsthand account of the 2022 NorthCape 4000, from Rovereto to North Cape, with an interactive route and photos from the ride.">
+  <meta name="description" content={articleHidden
+    ? 'Explore the 2022 NorthCape 4000 cycling route from Rovereto to North Cape, with elevation and ride data.'
+    : 'A firsthand account of the 2022 NorthCape 4000, from Rovereto to North Cape, with an interactive route and photos from the ride.'}>
   <meta name="theme-color" content="#ffdf32">
   <link rel="preload" href={asset('assets/barlow-condensed-800.woff2')} as="font" type="font/woff2" crossorigin="anonymous">
 </svelte:head>
@@ -217,7 +234,9 @@
   {/each}
 {/snippet}
 
-<a class="skip-link" href="#story" inert={exploring}>Skip to the story</a>
+<a class="skip-link" href={articleHidden ? '#route' : '#story'} inert={exploring}>
+  {articleHidden ? 'Skip to the route' : 'Skip to the story'}
+</a>
 <header class="masthead" inert={exploring}>
   <a class="masthead__title" href="#top" aria-label="NorthCape 4000, top of page">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 1v22M1 12h22M12 4.5l4 7.5-4 7.5-4-7.5Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M12 4.5 16 12h-4V4.5Z" fill="currentColor"/></svg>
@@ -225,67 +244,71 @@
   </a>
 </header>
 
-<main class="journey" class:is-hydrated={hydrated} class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
+<main class="journey" class:is-hydrated={hydrated} class:article-hidden={articleHidden} class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
   <section class="cover" aria-labelledby="cover-title" inert={exploring} bind:this={cover}>
     <div class="paper-surface" bind:this={coverPaper}>
       <div class="paper-content">
         <h1 id="cover-title">The long<br> way north</h1>
         <p>From the Italian Alps to the edge of Europe by bicycle.</p>
         <p class="ride-facts">≈3,825 km <span></span> 22 days <span></span> 2022</p>
-        <a class="cover__action" href="#story">
-          Read the story
+        <a class="cover__action" href={articleHidden ? '#route' : '#story'}>
+          {articleHidden ? 'View the route' : 'Read the story'}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m-5-5 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
       </div>
     </div>
   </section>
 
-  <RouteAtlas {chapters} {position} {framing} {scrollPosition} {exploring} onExplore={setExploring}
+  <RouteAtlas {chapters} position={articleHidden ? completedRide : position} {framing} {scrollPosition} {exploring} {articleHidden} onExplore={setExploring}
     onReturnCamera={(offset) => { returnOffset = offset; }} onChapter={jumpToChapter} bind:element={atlas} bind:toggle />
 
-  <article class="journal" aria-labelledby="story" inert={exploring} bind:this={journal} style:--paper-dock-inset={`${paperDockInset}px`}>
-    <section class="story-panel" aria-labelledby="story" bind:this={intro}>
-      <div class="paper-surface">
-        <div class="paper-content">
-          <header class="chapter-head">
-            <h2 id="story" tabindex="-1">Rovereto to North Cape</h2>
-          </header>
-          <p class="reading-hint">Scroll the story to trace the ride. Choose a map stop to jump to its chapter.</p>
-          {@render prose(article.intro)}
-        </div>
-      </div>
-    </section>
-    {#each chapters as chapter, index (chapter.id)}
-      <section class="story-panel" class:story-panel--right={index % 2 === 1} aria-labelledby={chapter.id} data-chapter>
+  {#if !articleHidden}
+    <article class="journal" aria-labelledby="story" inert={exploring} bind:this={journal} style:--paper-dock-inset={`${paperDockInset}px`}>
+      <section class="story-panel" aria-labelledby="story" bind:this={intro}>
         <div class="paper-surface">
           <div class="paper-content">
             <header class="chapter-head">
-              <h2 id={chapter.id} tabindex="-1">{chapter.title}</h2>
-              <p class="chapter-meta">Days {day(chapter.days[0])}–{day(chapter.days[1])} · {chapter.location}</p>
+              <h2 id="story" tabindex="-1">Rovereto to North Cape</h2>
             </header>
-            {@render prose(chapter.paragraphs, chapter.photos)}
+            <p class="reading-hint">Scroll the story to trace the ride. Choose a map stop to jump to its chapter.</p>
+            {@render prose(article.intro)}
           </div>
         </div>
       </section>
-    {/each}
-    <section class="story-panel story-panel--right" aria-labelledby="afterword" bind:this={afterword}>
-      <div class="paper-surface">
-        <div class="paper-content">
-          <header class="chapter-head"><h2 id="afterword" tabindex="-1">The way home</h2></header>
-          {@render prose(article.afterword, article.afterwordPhotos)}
+      {#each chapters as chapter, index (chapter.id)}
+        <section class="story-panel" class:story-panel--right={index % 2 === 1} aria-labelledby={chapter.id} data-chapter>
+          <div class="paper-surface">
+            <div class="paper-content">
+              <header class="chapter-head">
+                <h2 id={chapter.id} tabindex="-1">{chapter.title}</h2>
+                <p class="chapter-meta">Days {day(chapter.days[0])}–{day(chapter.days[1])} · {chapter.location}</p>
+              </header>
+              {@render prose(chapter.paragraphs, chapter.photos)}
+            </div>
+          </div>
+        </section>
+      {/each}
+      <section class="story-panel story-panel--right" aria-labelledby="afterword" bind:this={afterword}>
+        <div class="paper-surface">
+          <div class="paper-content">
+            <header class="chapter-head"><h2 id="afterword" tabindex="-1">The way home</h2></header>
+            {@render prose(article.afterword, article.afterwordPhotos)}
+          </div>
         </div>
-      </div>
-    </section>
-  </article>
+      </section>
+    </article>
+  {/if}
 </main>
 
 <footer class="journal__footer" inert={exploring}>
-  <nav id="chapters" aria-label="Chapter stops">
-    <ul>
-      {#each chapters as chapter (chapter.id)}
-        <li><a href={'#' + chapter.id} title={chapter.title}>{chapter.pin}</a></li>
-      {/each}
-    </ul>
-  </nav>
+  {#if !articleHidden}
+    <nav id="chapters" aria-label="Chapter stops">
+      <ul>
+        {#each chapters as chapter (chapter.id)}
+          <li><a href={'#' + chapter.id} title={chapter.title}>{chapter.pin}</a></li>
+        {/each}
+      </ul>
+    </nav>
+  {/if}
   <a href="#top">Back to the start</a>
 </footer>
