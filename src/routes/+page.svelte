@@ -167,9 +167,16 @@
   }
 
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && exploring) {
+    if (event.key !== 'Escape') return;
+    // Escape leaves the map in story mode, so it also brings the cover back here.
+    if (exploring) {
       event.preventDefault();
       void setExploring(false);
+      return;
+    }
+    if (mapTitleHidden) {
+      event.preventDefault();
+      mapTitleHidden = false;
     }
   }
 

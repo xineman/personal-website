@@ -602,6 +602,18 @@
           });
 
           document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && mapOnly) {
+              // Same contract as story mode: Escape leaves the map and puts the cover back.
+              event.preventDefault();
+              event.stopPropagation();
+              if (isInspectionPinned()) {
+                clearInspection(true);
+                return;
+              }
+              fitRoute();
+              onMapReset?.();
+              return;
+            }
             if (!mode) return;
             if (event.key === 'Escape' && isInspectionPinned()) {
               event.preventDefault();
