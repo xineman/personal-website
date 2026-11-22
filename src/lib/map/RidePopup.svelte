@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
+  import { on } from 'svelte/events';
   import type { RouteData, ScreenPoint } from './route-data.js';
   import { elevationAtDistance, type ElevationPoint, type RideSample, type RideWindow } from './ride-data.js';
   import { placeRidePopup, popupLeader, type ScreenRect } from './ride-inspection.js';
@@ -12,22 +13,26 @@
     distance: number;
     window: RideWindow;
     routeElevation: ElevationPoint[];
-    point: ScreenPoint;
+    point: ScreenPoint | undefined;
+    anchor: ScreenPoint;
     viewport: Pick<ScreenRect, 'width' | 'height'>;
     pinned: boolean;
     keyboard: boolean;
     onClear: () => void;
-    onScrub: (distance: number) => void;
+    onScrub: (distance: number) => number | undefined;
   }
 
-  let { day, kind, dayDistance, sample, distance, window, routeElevation, point, viewport, pinned, keyboard, onClear, onScrub }: Props = $props();
+  let { day, kind, dayDistance, sample, distance, window, routeElevation, point, anchor, viewport, pinned, keyboard, onClear, onScrub }: Props = $props();
   let panel = $state<HTMLElement>();
   let clearButton = $state<HTMLButtonElement>();
+  let plotElement = $state<HTMLDivElement>();
   let slider = $state<HTMLInputElement>();
   let size = $state({ width: 0, height: 0 });
   let obstacles = $state.raw<ScreenRect[]>([]);
   let position = $state<ScreenPoint>();
-  let scrubWindow = $state.raw<RideWindow>();
+  let swipe: { pointerId: number; x: number; startY?: number } | undefined;
+  let scrubTarget: { requested: number; selected: number } | undefined;
+  let lastScrub = -Infinity;
   let focused = false;
   const id = $props.id();
   const number = new Intl.NumberFormat('en');
@@ -109,17 +114,66 @@
     return { x, y, transform, ticks: hasElevation ? [middle + half, middle, min] : [] };
   });
 
+  function scrubTo(next: number) {
+    const first = routeElevation[0][0];
+    const last = routeElevation[routeElevation.length - 1][0];
+    const requested = Math.max(first, Math.min(last, next));
+    lastScrub = performance.now();
+    const selected = onScrub(requested);
+    if (selected !== undefined) scrubTarget = { requested, selected };
+  }
+
+  function scrubBy(fraction: number) {
+    // Keep accumulating motion if the map snaps the selected point across a gap in the route.
+    const start = scrubTarget?.selected === distance ? scrubTarget.requested : distance;
+    scrubTo(start + fraction * (window.end - window.start));
+  }
+
   function scrubWithKey(event: KeyboardEvent) {
     const direction = ['ArrowLeft', 'ArrowDown'].includes(event.key) ? -1 : ['ArrowRight', 'ArrowUp'].includes(event.key) ? 1 : 0;
     if (!direction) return;
     event.preventDefault();
-    const next = distance + direction * (window.end - window.start) / 100;
-    onScrub(Math.max(routeElevation[0][0], Math.min(routeElevation[routeElevation.length - 1][0], next)));
+    scrubBy(direction / 100);
   }
 
-  function endScrub() {
-    scrubWindow = undefined;
+  function scrubWithWheel(event: WheelEvent) {
+    const width = slider?.clientWidth;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!width || !delta || event.ctrlKey) return;
+    event.preventDefault();
+    const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 :
+      event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? width : 1;
+    scrubBy(delta * unit / (4 * width));
   }
+
+  function startScrub(event: PointerEvent & { currentTarget: HTMLDivElement }) {
+    if (!pinned || event.pointerType === 'mouse' || !event.isPrimary || event.button !== 0 || swipe) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    swipe = { pointerId: event.pointerId, x: event.clientX, startY: event.clientY };
+  }
+
+  function moveScrub(event: PointerEvent & { currentTarget: HTMLDivElement }) {
+    if (swipe?.pointerId !== event.pointerId) return;
+    const delta = swipe.x - event.clientX;
+    if (swipe.startY !== undefined) {
+      if (Math.abs(delta) < Math.max(6, Math.abs(swipe.startY - event.clientY))) return;
+      swipe.startY = undefined;
+    }
+    swipe.x = event.clientX;
+    if (delta) scrubBy(delta / event.currentTarget.clientWidth);
+  }
+
+  function endScrub(event?: PointerEvent) {
+    if (!swipe || (event && swipe.pointerId !== event.pointerId)) return;
+    const { pointerId } = swipe;
+    swipe = undefined;
+    if (plotElement?.hasPointerCapture(pointerId)) plotElement.releasePointerCapture(pointerId);
+  }
+
+  $effect(() => {
+    if (plotElement && pinned) return on(plotElement, 'wheel', scrubWithWheel, { passive: false });
+  });
 
   $effect(() => {
     if (!panel || !viewport.width || !viewport.height) return;
@@ -143,8 +197,10 @@
   });
 
   $effect(() => {
-    if (!size.width) return;
-    position = placeRidePopup(point, size, viewport, obstacles, untrack(() => position));
+    const placementInputs = [anchor, size, viewport, obstacles] as const;
+    // Keep the chart still during swipes and bursts of wheel or keyboard input.
+    if (!size.width || untrack(() => swipe || performance.now() - lastScrub < 200)) return;
+    position = placeRidePopup(...placementInputs, untrack(() => position));
   });
 
   $effect(() => {
@@ -160,8 +216,10 @@
     return () => { cancelled = true; };
   });
 
-  const leader = $derived(position && popupLeader(point, position, size.width, size.height));
+  const leader = $derived(point && position && popupLeader(point, position, size.width, size.height));
 </script>
+
+<svelte:window onblur={() => endScrub()} />
 
 <div class="ride-overlay">
   <svg class="leader" viewBox="0 0 {viewport.width} {viewport.height}" aria-hidden="true">
@@ -170,7 +228,9 @@
       <path d={leader} stroke="var(--color-ink)" stroke-width="1.4" />
     {/if}
   </svg>
-  <span class="map-point" style:left="{point.x}px" style:top="{point.y}px" aria-hidden="true"></span>
+  {#if point}
+    <span class="map-point" style:left="{point.x}px" style:top="{point.y}px" aria-hidden="true"></span>
+  {/if}
 
   <section class="ride-popup" class:pinned bind:this={panel} aria-label="Ride data"
     inert={!pinned} style:left="{position?.x ?? 0}px" style:top="{position?.y ?? 0}px" style:visibility={position ? 'visible' : 'hidden'}>
@@ -197,7 +257,9 @@
           <strong>Elevation profile</strong>
           {#if pinned}<button type="button" bind:this={clearButton} onclick={onClear}>Clear point</button>{/if}
         </header>
-        <div class="plot">
+        <div class="plot" role="group" aria-label="Elevation profile" bind:this={plotElement}
+          onpointerdown={startScrub} onpointermove={moveScrub} onpointerup={endScrub}
+          onpointercancel={endScrub} onlostpointercapture={endScrub}>
           <svg viewBox="0 0 312 84" role="img" aria-label="Elevation over the surrounding route">
             <defs><clipPath id={id}><rect x={plot.left} y="0" width={plot.right - plot.left} height={plot.bottom + 1} /></clipPath></defs>
             {#each chart.ticks as tick, index}
@@ -229,13 +291,15 @@
             {/if}
           </svg>
           {#if pinned}
-            <input type="range" min={(scrubWindow ?? window).start} max={(scrubWindow ?? window).end} step="any" value={distance} bind:this={slider}
+            <input type="range" min={window.start} max={window.end} step="any" value={distance} bind:this={slider}
               aria-label="Point on the elevation profile" aria-valuetext={description}
-              onpointerdown={() => { scrubWindow = window; }} onpointerup={endScrub} onpointercancel={endScrub}
-              onlostpointercapture={endScrub} onblur={endScrub} onkeydown={scrubWithKey}
-              oninput={(event) => onScrub(event.currentTarget.valueAsNumber)} />
+              onkeydown={scrubWithKey}
+              oninput={(event) => scrubTo(event.currentTarget.valueAsNumber)} />
           {/if}
         </div>
+        {#if pinned}
+          <p class="scrub-hint"><span>Scroll to move along the route</span><span>Swipe left or right to move along the route</span></p>
+        {/if}
       </div>
     {/if}
   </section>
@@ -245,7 +309,7 @@
   .ride-overlay { position: absolute; inset: 0; z-index: 1; pointer-events: none; color: var(--color-ink); }
   .leader { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; }
   .map-point {
-    position: absolute; width: 19px; height: 19px; z-index: 1; transform: translate(-50%, -50%);
+    position: absolute; width: 19px; height: 19px; transform: translate(-50%, -50%);
     border: 2px solid var(--color-ink); border-radius: 50%; outline: 3px solid var(--color-paper); background: var(--color-route);
   }
   .map-point::after { content: ''; position: absolute; inset: 5px; background: var(--color-ink); border-radius: 50%; }
@@ -260,12 +324,21 @@
   }
   .ride-heading strong { font-weight: 800; }
   .ride-heading span { font-size: .72rem; font-weight: 700; white-space: nowrap; }
-  .readings, .missing { margin: 0; padding: .58rem .75rem .65rem; }
+  .readings, .missing {
+    --reading-value-size: 2.06rem;
+    --reading-value-line: calc(var(--reading-value-size) * .98);
+    --reading-label-line: .82rem;
+    --reading-gap: .2rem;
+    box-sizing: content-box;
+    min-block-size: calc(var(--reading-value-line) + var(--reading-label-line) + var(--reading-gap));
+    margin: 0; padding: .58rem .75rem .65rem;
+  }
+  .missing { display: grid; align-content: center; }
   .readings { display: grid; grid-template-columns: 1.1fr 1fr .78fr; column-gap: .5rem; }
   .readings:not(:has(> :nth-child(3))) { grid-template-columns: repeat(var(--reading-count), minmax(0, 1fr)); }
-  .readings > div { display: flex; flex-direction: column-reverse; gap: .2rem; }
-  dt, .missing { font-size: .69rem; font-weight: 670; }
-  dd { margin: 0; white-space: nowrap; font: 800 2.06rem/.98 var(--font-display); }
+  .readings > div { display: flex; flex-direction: column-reverse; gap: var(--reading-gap); }
+  dt, .missing { font-size: .69rem; font-weight: 670; line-height: var(--reading-label-line); }
+  dd { margin: 0; white-space: nowrap; font: 800 var(--reading-value-size)/var(--reading-value-line) var(--font-display); }
   dd small { margin-left: .18rem; font: 690 .71rem/1 var(--font-ui); }
   .profile { margin-inline: .75rem; padding-bottom: .34rem; border-top: 1px solid var(--color-rule); }
   .profile header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.45rem; font-size: .72rem; }
@@ -286,14 +359,23 @@
   .axis, .cursor { fill: none; stroke: currentColor; }
   .chart-point { fill: var(--color-route); stroke: currentColor; stroke-width: 1.5; }
   .plot input {
-    position: absolute; inset: 0 2% 18% 13%; width: 85%; height: 82%; opacity: 0; margin: 0; cursor: ew-resize;
+    position: absolute; inset: 0 2% 18% 13%; width: 85%; height: 82%; opacity: 0; margin: 0;
+    pointer-events: none;
   }
+  .plot:has(input) { touch-action: pan-y pinch-zoom; user-select: none; }
   .plot:has(input:focus-visible) { outline: 2px solid currentColor; outline-offset: 1px; }
+  .scrub-hint { margin: .18rem 0 0; font-size: .69rem; }
+  .scrub-hint span + span { display: none; }
+
+  @media (hover: none) and (pointer: coarse) {
+    .scrub-hint span { display: none; }
+    .scrub-hint span + span { display: inline; }
+  }
 
   @media (max-width: 639px) {
     .ride-popup { width: min(19.25rem, calc(100% - 16px)); }
-    .readings { padding-inline: .65rem; gap: .35rem; }
-    dd { font-size: clamp(1.52rem, 7vw, 1.87rem); }
+    .readings, .missing { --reading-value-size: clamp(1.52rem, 7vw, 1.87rem); padding-inline: .65rem; }
+    .readings { column-gap: .35rem; }
     .profile button, .ride-heading button { min-height: 2rem; }
   }
 </style>
