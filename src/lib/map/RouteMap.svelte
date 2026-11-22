@@ -1,11 +1,21 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { asset } from '$app/paths';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import type { GeoJSONSource, JumpToOptions, LngLatBounds, Map as MapLibreMap, MapMouseEvent, MapTouchEvent, Marker } from 'maplibre-gl';
-  import type { MapFraming, RouteChapter, RouteData, ScreenPoint } from './route-data.js';
+  import RidePopup from './RidePopup.svelte';
+  import type { Coordinates, MapFraming, RouteChapter, RouteData, ScreenPoint } from './route-data.js';
   import { prepareRoute, type ReadingPosition } from './route-progress.js';
-  import { atlasStyle, completedFilter, completedRouteLayers, partialRouteSource, routeHitLayer } from './map-style.js';
+  import { atlasStyle, completedFilter, completedRouteLayers, inspectedRouteSource, partialRouteSource, routeHitLayer } from './map-style.js';
+  import { rideSample, rideWindow, routeCoordinate, type RideData, type RideWindow, type RouteElevationData } from './ride-data.js';
+  import { locateRidePoint, prepareRideCourse, rideCourseStretch, type RideCourse } from './ride-course.js';
+  import { nearestRouteHit, type RouteHit } from './ride-inspection.js';
+
+  type InspectionInput = 'hover' | 'pointer' | 'keyboard';
+  type InspectionHit = RouteHit & { input: InspectionInput };
+  type RideSelection = { order: number; distance: number; input: InspectionInput };
+  type Inspection = RideSelection & { window: RideWindow; coordinate: Coordinates };
 
   interface Props {
     chapters: RouteChapter[];
@@ -39,8 +49,24 @@
   let readingView: { camera: JumpToOptions; follows: boolean } | undefined;
   let previousScroll: number | undefined;
   let previousFraming: MapFraming | undefined;
+  let inspection = $state.raw<Inspection>();
+  let rideCourse = $state.raw<RideCourse>();
+  const recordings = new SvelteMap<number, RideData | 'loading' | 'failed'>();
+  let loadReadings: ((order: number, retry: boolean) => Promise<void>) | undefined;
+  let inspectionPoint = $state.raw<ScreenPoint>();
+  let viewport = $state.raw({ width: 0, height: 0 });
+  let profileSpan = 10_000;
+  let highlighted: RideWindow | undefined;
+  let inspectionNotice = $state('');
+  let pendingInspection: InspectionHit | undefined;
   const minZoom = 0.5;
   const maxZoom = 16;
+  const inspectedTrack = $derived(inspection && rideCourse?.tracks[inspection.order]);
+  const dayDistance = $derived(inspection && inspectedTrack ? inspectedTrack.dayStart + inspection.distance - inspectedTrack.start : 0);
+  const inspectedSample = $derived.by(() => {
+    const recording = inspection && recordings.get(inspection.order);
+    return typeof recording === 'object' ? rideSample(recording, dayDistance) : undefined;
+  });
 
   function gesturePosition(event: MouseEvent | TouchEvent | undefined): ScreenPoint | undefined {
     if (event instanceof MouseEvent) return { x: event.clientX, y: event.clientY };
@@ -103,10 +129,14 @@
 
   function setMapMode(instance: MapLibreMap, open: boolean) {
     mode = open;
+    instance.getCanvas().setAttribute('aria-label', open
+      ? 'Route map. Use arrow keys to pan, plus or minus to zoom, and Enter to inspect the nearest route point.'
+      : 'Route map. Use arrow keys to pan and plus or minus to zoom.');
     if (open) {
       instance.cooperativeGestures.disable();
       instance.scrollZoom.enable();
     } else {
+      clearInspection();
       instance.cooperativeGestures.enable();
       instance.scrollZoom.disable();
       followsStory = readingView?.follows ?? true;
@@ -166,11 +196,84 @@
   }
 
   function updateMarkers(instance: MapLibreMap) {
+    if (!host) return;
     zoom = instance.getZoom();
+    const width = host.clientWidth;
+    const height = host.clientHeight;
+    if (viewport.width !== width || viewport.height !== height) viewport = { width, height };
     for (const { marker } of pins) {
       const { x, y } = instance.project(marker.getLngLat());
-      marker.getElement().inert = x < 0 || x > host.clientWidth || y < 0 || y > host.clientHeight;
+      marker.getElement().inert = x < 0 || x > width || y < 0 || y > height;
     }
+    projectInspection();
+  }
+
+  function projectInspection() {
+    if (!map || !inspection) return;
+    const point = map.project(inspection.coordinate);
+    inspectionPoint = point.x >= 0 && point.x <= viewport.width && point.y >= 0 && point.y <= viewport.height ? point : undefined;
+  }
+
+  function isInspectionPinned() {
+    const selection = pendingInspection ?? inspection;
+    return selection !== undefined && selection.input !== 'hover';
+  }
+
+  function clearInspection(restoreFocus = false) {
+    pendingInspection = undefined;
+    inspectionNotice = '';
+    if (inspection) {
+      inspection = undefined;
+      inspectionPoint = undefined;
+      highlighted = undefined;
+      map?.getSource<GeoJSONSource>(inspectedRouteSource)?.setData({ type: 'FeatureCollection', features: [] });
+    }
+    if (restoreFocus) map?.getCanvas().focus({ preventScroll: true });
+  }
+
+  function showInspection({ order, distance, input }: RideSelection) {
+    if (!rideCourse) return;
+    const previous = inspection;
+    const window = rideWindow(rideCourse.elevation, distance, profileSpan, previous?.window);
+    if (previous?.window === window && previous.distance === distance && previous.order === order && previous.input === input) return;
+
+    const { feature, vertices } = rideCourse.tracks[order];
+    inspection = {
+      order, distance, input, window,
+      coordinate: routeCoordinate(feature.geometry.coordinates, vertices, distance)
+    };
+    // Skip rebuilding map geometry until an endpoint has moved roughly a screen pixel.
+    const pixel = (window.end - window.start) / Math.max(1, Math.min(viewport.width, viewport.height) * .65);
+    if (!highlighted || (window !== highlighted &&
+      (Math.abs(window.start - highlighted.start) >= pixel || Math.abs(window.end - highlighted.end) >= pixel))) {
+      highlighted = window;
+      map?.getSource<GeoJSONSource>(inspectedRouteSource)?.setData(rideCourseStretch(rideCourse, window));
+    }
+    projectInspection();
+  }
+
+  function scrubInspection(distance: number) {
+    if (!inspection || inspection.input === 'hover' || !rideCourse) return;
+    const position = locateRidePoint(rideCourse, distance);
+    void loadReadings?.(position.order, false);
+    showInspection({ ...position, input: inspection.input });
+    revealInspectionPoint();
+  }
+
+  function resizeInspectionProfile() {
+    if (!mode || !map || !viewport.width || !viewport.height) return;
+    const { width, height } = viewport;
+    const a = map.unproject([width / 2 - 16, height / 2]);
+    const b = map.unproject([width / 2 + 16, height / 2]);
+    const next = Math.max(500, a.distanceTo(b) / 32 * Math.min(width, height) * .65);
+    if (next === profileSpan) return;
+    profileSpan = next;
+    if (inspection) showInspection(inspection);
+  }
+
+  function revealInspectionPoint() {
+    // Scrubbing or snapping to a sample near the edge can move the point beyond the camera.
+    if (inspection && !inspectionPoint) map?.jumpTo({ center: inspection.coordinate });
   }
 
   function showProgress(current: ReadingPosition) {
@@ -217,6 +320,7 @@
     const controller = new AbortController();
     let observer: IntersectionObserver | undefined;
     let resize: ResizeObserver | undefined;
+    let hoverFrame: number | undefined;
 
     async function start() {
       try {
@@ -265,10 +369,109 @@
           if (event.sourceId === 'route') unavailable = true;
         });
 
-        const chapterAt = (event: MapMouseEvent) => {
-          if ((event.originalEvent.target as Element).closest('a') || !instance.getLayer(routeHitLayer)) return null;
-          return instance.queryRenderedFeatures(event.point, { layers: [routeHitLayer] })[0]?.properties.chapterId ?? null;
+        const routeQuery = { layers: [routeHitLayer] };
+        const telemetryUrl = new URL('route-telemetry/', new URL(asset('route.geojson'), document.baseURI));
+        const screenPaths = new Map<number, ScreenPoint[]>();
+        let profileStatus: 'idle' | 'loading' | 'failed' = 'idle';
+
+        function routeAt(point: MapMouseEvent['point']) {
+          if (!instance.getLayer(routeHitLayer)) return;
+          return instance.queryRenderedFeatures(point, routeQuery)[0]?.properties;
+        }
+
+        async function fetchTelemetry<T>(key: string): Promise<T> {
+          const response = await fetch(new URL(key + '.json', telemetryUrl), { signal: controller.signal });
+          if (!response.ok) throw new Error(`Ride telemetry request failed: ${key}`);
+          return response.json();
+        }
+
+        function inspectAt(point: ScreenPoint, radius?: number) {
+          if (!route.elevationProfile) return;
+          const matches = radius === undefined ? instance.queryRenderedFeatures(routeQuery) : instance.queryRenderedFeatures(
+            [[point.x - radius, point.y - radius], [point.x + radius, point.y + radius]], routeQuery
+          );
+          const orders = new Set<number>(matches.flatMap(({ properties: { order, telemetry, day } }) =>
+            typeof order === 'number' && typeof telemetry === 'string' && typeof day === 'number' ? [order] : []
+          ));
+          return nearestRouteHit(point, orders, (order) => {
+            let path = screenPaths.get(order);
+            if (!path) {
+              path = course.data.features[order].geometry.coordinates.map((coordinate) => instance.project(coordinate));
+              screenPaths.set(order, path);
+            }
+            return path;
+          }, radius ?? Infinity, radius === undefined ? viewport : undefined);
+        }
+
+        function displayInspection({ order, edge, fraction, input }: InspectionHit) {
+          const vertices = rideCourse?.tracks[order]?.vertices;
+          if (!vertices) return;
+          const a = vertices[edge];
+          const b = vertices[edge + 1];
+          inspectionNotice = '';
+          void loadReadings?.(order, input !== 'hover');
+          showInspection({ order, distance: a + fraction * (b - a), input });
+          if (input === 'keyboard') revealInspectionPoint();
+        }
+
+        async function inspect(hit: RouteHit, input: InspectionInput) {
+          const profile = route.elevationProfile;
+          if (!profile) return;
+          const pinned = input !== 'hover';
+          if (pinned && inspection && inspection.order !== hit.order) clearInspection();
+          if (!inspection && !pendingInspection) resizeInspectionProfile();
+          const selection = { ...hit, input };
+          if (rideCourse) {
+            displayInspection(selection);
+            return;
+          }
+          if (profileStatus === 'failed' && !pinned) return;
+          pendingInspection = selection;
+          if (pinned) inspectionNotice = 'Loading elevation profile…';
+          if (profileStatus === 'loading') return;
+          profileStatus = 'loading';
+
+          try {
+            const data = await fetchTelemetry<RouteElevationData>(profile);
+            if (controller.signal.aborted) return;
+            rideCourse = prepareRideCourse(course.data, data);
+            profileStatus = 'idle';
+          } catch {
+            if (controller.signal.aborted) return;
+            profileStatus = 'failed';
+            if (isInspectionPinned()) {
+              inspectionNotice = 'Elevation profile couldn’t load. Select the route to retry.';
+            }
+          }
+
+          const pending = pendingInspection;
+          pendingInspection = undefined;
+          if (rideCourse && pending) displayInspection(pending);
+        }
+
+        loadReadings = async (order, retry) => {
+          const feature = course.data.features[order];
+          const key = feature.properties.telemetry;
+          const cached = recordings.get(order);
+          if (!key || (cached && !(cached === 'failed' && retry))) return;
+          recordings.set(order, 'loading');
+          try {
+            const recording = await fetchTelemetry<RideData>(key);
+            if (controller.signal.aborted) return;
+            if (!Array.isArray(recording.vertices) || recording.vertices.length !== feature.geometry.coordinates.length ||
+              !Array.isArray(recording.samples) || recording.samples.length < 2) throw new Error('Ride data does not match the track');
+            recordings.set(order, recording);
+          } catch {
+            if (!controller.signal.aborted) recordings.set(order, 'failed');
+          }
         };
+
+        let hoverPoint: ScreenPoint | undefined;
+        function stopHover() {
+          hoverPoint = undefined;
+          if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
+          hoverFrame = undefined;
+        }
 
         instance.once('load', () => {
           for (const [index, chapter] of chapters.entries()) {
@@ -307,12 +510,61 @@
           }
 
           instance.on('mousemove', (event) => {
-            instance.getCanvas().style.cursor = chapterAt(event) ? 'pointer' : '';
+            const overLink = (event.originalEvent.target as Element).closest('a');
+            if (!mode) {
+              instance.getCanvas().style.cursor = !overLink && routeAt(event.point)?.chapterId ? 'pointer' : '';
+              return;
+            }
+            if (isInspectionPinned() || instance.isMoving()) return;
+            if (overLink) {
+              stopHover();
+              clearInspection();
+              return;
+            }
+            hoverPoint = event.point;
+            hoverFrame ??= requestAnimationFrame(() => {
+              hoverFrame = undefined;
+              if (!hoverPoint || !mode || isInspectionPinned() || instance.isMoving()) return;
+              const hit = inspectAt(hoverPoint, 9);
+              instance.getCanvas().style.cursor = hit ? 'crosshair' : '';
+              if (hit) void inspect(hit, 'hover');
+              else clearInspection();
+            });
+          });
+          instance.on('mouseout', () => {
+            stopHover();
+            if (!isInspectionPinned()) clearInspection();
           });
           instance.on('click', (event) => {
-            const id = chapterAt(event);
-            if (id) onChapter(id);
+            if ((event.originalEvent.target as Element).closest('a')) return;
+            if (mode) {
+              stopHover();
+              const hit = inspectAt(event.point, 16);
+              if (hit) {
+                void inspect(hit, 'pointer');
+                return;
+              }
+              clearInspection();
+            }
+            const feature = routeAt(event.point);
+            if (mode && feature?.telemetry && route.elevationProfile) return;
+            if (feature?.chapterId) onChapter(feature.chapterId);
           });
+
+          document.addEventListener('keydown', (event) => {
+            if (!mode) return;
+            if (event.key === 'Escape' && isInspectionPinned()) {
+              event.preventDefault();
+              event.stopPropagation();
+              clearInspection(true);
+            }
+            if (event.key === 'Enter' && event.target === instance.getCanvas()) {
+              const hit = inspectAt({ x: viewport.width / 2, y: viewport.height / 2 });
+              if (!hit) return;
+              event.preventDefault();
+              void inspect(hit, 'keyboard');
+            }
+          }, { signal: controller.signal });
 
           updateMarkers(instance);
           if (!unavailable) ready = true;
@@ -321,8 +573,17 @@
         followReading();
         instance.on('movestart', (event) => {
           if (event.originalEvent) followsStory = false;
+          stopHover();
+          if (!isInspectionPinned()) clearInspection();
         });
-        instance.on('move', () => updateMarkers(instance));
+        instance.on('move', () => {
+          screenPaths.clear();
+          updateMarkers(instance);
+        });
+        instance.on('moveend', () => {
+          if (inspection && inspection.input !== 'hover' && !inspectionPoint) clearInspection();
+        });
+        instance.on('zoom', resizeInspectionProfile);
 
         let beforeDrag: typeof readingView;
         let dragOrigin: ScreenPoint | undefined;
@@ -336,6 +597,7 @@
           instance.resize();
           followReading();
           updateMarkers(instance);
+          resizeInspectionProfile();
         }
 
         function prepareDrag({ originalEvent }: MapMouseEvent | MapTouchEvent) {
@@ -381,6 +643,7 @@
 
     return () => {
       controller.abort();
+      if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
       observer?.disconnect();
       resize?.disconnect();
       for (const { marker } of pins) marker.remove();
@@ -394,7 +657,7 @@
 <div class="map-host" class:exploring bind:this={host} inert={!ready} aria-label="Route from Rovereto to North Cape"></div>
 
 {#if ready}
-  <div class="map-controls" role="group" aria-label="Map controls">
+  <div class="map-controls" class:inspecting={exploring && !!inspection && !!inspectionPoint} role="group" aria-label="Map controls">
     <button type="button" aria-label="Zoom in" title="Zoom in" onclick={() => changeZoom(1)} disabled={zoom >= maxZoom}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </button>
@@ -415,6 +678,15 @@
     <span aria-hidden="true">·</span>
     <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>
   </div>
+  {#if exploring && inspection && inspectionPoint && rideCourse && inspectedTrack}
+    <RidePopup day={inspectedTrack.feature.properties.day} kind={inspectedTrack.feature.properties.kind}
+      {dayDistance} sample={inspectedSample} distance={inspection.distance} window={inspection.window} routeElevation={rideCourse.elevation}
+      point={inspectionPoint} {viewport} pinned={inspection.input !== 'hover'} keyboard={inspection.input === 'keyboard'}
+      onClear={() => clearInspection(true)} onScrub={scrubInspection} />
+  {/if}
+  {#if exploring && inspectionNotice}
+    <p class="inspection-notice" role="status">{inspectionNotice}</p>
+  {/if}
 {:else}
   <p class="map-status" role="status">
     {#if unavailable}
@@ -522,6 +794,10 @@
   .map-status, .basemap-status { right: .65rem; max-width: 11rem; font-size: .78rem; pointer-events: auto; }
   .map-status { top: 1.35rem; }
   .basemap-status { top: 11rem; }
+  .inspection-notice {
+    position: absolute; z-index: 1; bottom: 5.5rem; left: var(--edge); max-width: min(20rem, 72vw);
+    padding: .4rem .6rem; background: var(--color-paper); font-size: .76rem; font-weight: 640;
+  }
 
   @media (min-width: 1181px) {
     :global(.atlas.panel-right:not(.exploring)) .attribution { right: auto; left: .55rem; }
@@ -534,5 +810,10 @@
     .map-host :global(.chapter-pin__label) { font-size: .72rem; }
     .map-status { top: .55rem; }
     .basemap-status { inset: 4.5rem auto auto .55rem; max-width: 8rem; }
+  }
+
+  @media (max-width: 360px) {
+    .map-controls.inspecting { top: 3.4rem; bottom: auto; display: flex; }
+    .map-controls.inspecting button + button { border-top: 0; border-left: 1px solid var(--color-ink); }
   }
 </style>

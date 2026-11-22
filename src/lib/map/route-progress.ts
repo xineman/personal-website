@@ -1,4 +1,4 @@
-import type { Coordinates, RouteChapter, RouteData } from './route-data.js';
+import { greatCircleAngle, type Coordinates, type RouteChapter, type RouteData } from './route-data.js';
 
 export interface ReadingPosition {
   chapter: number;
@@ -9,14 +9,6 @@ export interface ReadingPosition {
 type RouteFeature = RouteData['features'][number];
 type OrderedFeature = RouteFeature & { properties: RouteFeature['properties'] & { order: number } };
 type OrderedRoute = Omit<RouteData, 'features'> & { features: OrderedFeature[] };
-
-function distance(a: Coordinates, b: Coordinates) {
-  const radians = Math.PI / 180;
-  const lat = (b[1] - a[1]) * radians;
-  const lon = (b[0] - a[0]) * radians;
-  const angle = Math.sin(lat / 2) ** 2 + Math.cos(a[1] * radians) * Math.cos(b[1] * radians) * Math.sin(lon / 2) ** 2;
-  return 2 * Math.asin(Math.sqrt(Math.min(1, angle)));
-}
 
 export function prepareRoute(route: RouteData, chapters: RouteChapter[]) {
   const crossings = new Map(route.features.filter(({ properties }) => properties.kind === 'ferry')
@@ -39,7 +31,7 @@ export function prepareRoute(route: RouteData, chapters: RouteChapter[]) {
       const points = feature.geometry.coordinates;
       const distances = [0];
       for (let index = 1; index < points.length; index++) {
-        distances.push(distances[index - 1] + distance(points[index - 1], points[index]));
+        distances.push(distances[index - 1] + greatCircleAngle(points[index - 1], points[index]));
       }
       const length = distances[distances.length - 1];
       const start = total;

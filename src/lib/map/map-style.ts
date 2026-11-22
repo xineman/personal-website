@@ -4,6 +4,7 @@ import type { RouteChapter, RouteData } from './route-data.js';
 
 export const routeHitLayer = 'route-hit';
 export const partialRouteSource = 'partial-route';
+export const inspectedRouteSource = 'inspected-route';
 const sea = '#c2bbec';
 const land = '#f7eba5';
 const border = '#9d8760';
@@ -66,6 +67,7 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
       basemap: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
       route: { type: 'geojson', data: route },
       [partialRouteSource]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      [inspectedRouteSource]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       'arctic-circle': {
         type: 'geojson',
         data: {
@@ -159,6 +161,21 @@ export function atlasStyle(route: RouteData, chapters: RouteChapter[]): StyleSpe
       ...routeLines('route', false),
       ...routeLines('completed', true),
       ...routeLines(partialRouteSource, true),
+      {
+        id: 'inspected-route-casing', type: 'line', source: inspectedRouteSource,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#fff9e6', 'line-width': 8 }
+      },
+      {
+        id: 'inspected-ride', type: 'line', source: inspectedRouteSource, filter: kindFilter('ride'),
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#2d2341', 'line-width': 3.5 }
+      },
+      {
+        id: 'inspected-official', type: 'line', source: inspectedRouteSource, filter: kindFilter('official'),
+        layout: { 'line-join': 'round' },
+        paint: { 'line-color': '#2d2341', 'line-width': 3, 'line-dasharray': [2, 1.6] }
+      },
       // A wider invisible line makes route segments easier to select.
       {
         id: routeHitLayer, type: 'line', source: 'route',
