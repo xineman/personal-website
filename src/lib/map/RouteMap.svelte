@@ -23,13 +23,14 @@
     framing: MapFraming | undefined;
     scrollPosition: number;
     exploring: boolean;
+    mapOnly: boolean;
     onExplore: (open: boolean, drag?: ScreenPoint) => void;
     onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
     ready: boolean;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, onExplore, onReturnCamera, onChapter, ready = $bindable(false) }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, mapOnly, onExplore, onReturnCamera, onChapter, ready = $bindable(false) }: Props = $props();
   let host: HTMLDivElement;
   let map: MapLibreMap | undefined;
   let routeBounds: LngLatBounds;
@@ -329,8 +330,19 @@
 
   $effect(() => {
     if (!ready) return;
-    const open = exploring;
+    const open = exploring || mapOnly;
     untrack(() => changeMode(open, framing));
+  });
+
+  // The flag can arrive after the map has loaded, so clear the reading marks it may have drawn.
+  $effect(() => {
+    if (!ready || !mapOnly) return;
+    untrack(() => {
+      for (const { marker } of pins) marker.remove();
+      pins.length = 0;
+      tip?.remove();
+      tip = undefined;
+    });
   });
 
   $effect(() => {
@@ -375,7 +387,8 @@
 
         const instance = map = new lib.Map({
           container: host,
-          style: atlasStyle(course.data, chapters),
+          // Chapter pins are hidden when the flag is on, so keep their place labels visible.
+          style: atlasStyle(course.data, mapOnly ? [] : chapters),
           bounds: routeBounds,
           fitBoundsOptions: { padding: 24 },
           attributionControl: false,
@@ -505,39 +518,41 @@
         }
 
         instance.once('load', () => {
-          for (const [index, chapter] of chapters.entries()) {
-            const link = document.createElement('a');
-            link.className = 'chapter-pin';
-            link.classList.toggle('chapter-pin--endpoint', index === 0 || index === chapters.length - 1);
-            link.dataset.labelSide = index === 0 ? 'right' : chapter.labelSide;
-            link.href = '#' + chapter.id;
-            link.setAttribute('aria-label', `${chapter.pin}, ${chapter.title}`);
+          if (!mapOnly) {
+            for (const [index, chapter] of chapters.entries()) {
+              const link = document.createElement('a');
+              link.className = 'chapter-pin';
+              link.classList.toggle('chapter-pin--endpoint', index === 0 || index === chapters.length - 1);
+              link.dataset.labelSide = index === 0 ? 'right' : chapter.labelSide;
+              link.href = '#' + chapter.id;
+              link.setAttribute('aria-label', `${chapter.pin}, ${chapter.title}`);
 
-            const disc = document.createElement('span');
-            disc.className = 'chapter-pin__disc';
-            const label = document.createElement('span');
-            label.className = 'chapter-pin__label';
-            label.textContent = chapter.pin;
-            link.appendChild(disc);
-            link.appendChild(label);
+              const disc = document.createElement('span');
+              disc.className = 'chapter-pin__disc';
+              const label = document.createElement('span');
+              label.className = 'chapter-pin__label';
+              label.textContent = chapter.pin;
+              link.appendChild(disc);
+              link.appendChild(label);
 
-            link.addEventListener('click', (event) => {
-              if (event.button || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-              event.preventDefault();
-              onChapter(chapter.id);
-            });
+              link.addEventListener('click', (event) => {
+                if (event.button || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+                event.preventDefault();
+                onChapter(chapter.id);
+              });
 
-            const [lon, lat] = chapter.coordinates;
-            const marker = new lib.Marker({ element: link }).setLngLat([lon, lat]).addTo(instance);
-            pins.push({ id: chapter.id, marker });
-          }
+              const [lon, lat] = chapter.coordinates;
+              const marker = new lib.Marker({ element: link }).setLngLat([lon, lat]).addTo(instance);
+              pins.push({ id: chapter.id, marker });
+            }
 
-          const coordinate = course.reveal(position).tip;
-          if (coordinate) {
-            const element = document.createElement('span');
-            element.className = 'route-tip';
-            element.setAttribute('aria-hidden', 'true');
-            tip = new lib.Marker({ element }).setLngLat(coordinate).addTo(instance);
+            const coordinate = course.reveal(position).tip;
+            if (coordinate) {
+              const element = document.createElement('span');
+              element.className = 'route-tip';
+              element.setAttribute('aria-hidden', 'true');
+              tip = new lib.Marker({ element }).setLngLat(coordinate).addTo(instance);
+            }
           }
 
           instance.on('mousemove', (event) => {
@@ -636,7 +651,7 @@
         }
 
         function prepareDrag({ originalEvent }: MapMouseEvent | MapTouchEvent) {
-          if (exploring) return;
+          if (exploring || mapOnly) return;
           beforeDrag = captureReadingView(instance);
           dragOrigin = gesturePosition(originalEvent);
         }
@@ -645,7 +660,7 @@
         instance.on('touchstart', prepareDrag);
         instance.on('dragstart', ({ originalEvent }) => {
           panning = true;
-          if (exploring) return;
+          if (exploring || mapOnly) return;
           readingView ??= beforeDrag;
           openingFromDrag = true;
           const current = gesturePosition(originalEvent);
@@ -692,7 +707,7 @@
 <div class="map-host" class:exploring bind:this={host} inert={!ready} aria-label="Route from Rovereto to North Cape"></div>
 
 {#if ready}
-  <div class="map-controls" class:inspecting={exploring && !!inspection && !!(inspectionPoint || inspectionPan)} role="group" aria-label="Map controls">
+  <div class="map-controls" class:inspecting={(exploring || mapOnly) && !!inspection && !!(inspectionPoint || inspectionPan)} role="group" aria-label="Map controls">
     <button type="button" aria-label="Zoom in" title="Zoom in" onclick={() => changeZoom(1)} disabled={zoom >= maxZoom}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </button>
@@ -713,13 +728,13 @@
     <span aria-hidden="true">·</span>
     <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>
   </div>
-  {#if exploring && inspection && inspectionAnchor && (inspectionPoint || inspectionPan) && rideCourse && inspectedTrack}
+  {#if (exploring || mapOnly) && inspection && inspectionAnchor && (inspectionPoint || inspectionPan) && rideCourse && inspectedTrack}
     <RidePopup day={inspectedTrack.feature.properties.day} kind={inspectedTrack.feature.properties.kind}
       {dayDistance} sample={inspectedSample} distance={inspection.distance} window={inspection.window} routeElevation={rideCourse.elevation}
       point={inspectionPoint} anchor={inspectionAnchor} {viewport} pinned={inspection.input !== 'hover'} keyboard={inspection.input === 'keyboard'}
       onClear={() => clearInspection(true)} onScrub={scrubInspection} />
   {/if}
-  {#if exploring && inspectionNotice}
+  {#if (exploring || mapOnly) && inspectionNotice}
     <p class="inspection-notice" role="status">{inspectionNotice}</p>
   {/if}
 {:else}

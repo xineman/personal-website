@@ -88,6 +88,10 @@ h1, h2, p, figure { margin: 0; }
 .cover__action { display: inline-flex; align-items: center; gap: .6rem; min-height: 2.75rem; margin-top: 1.1rem; font-weight: 760; }
 .cover__action svg { flex: none; }
 .journal { grid-row: 2; padding-inline: var(--edge); pointer-events: none; }
+/* The hide-article flag leaves the cover heading in place and hands the page to the atlas. */
+.journey.is-map-only { min-height: 100svh; }
+.journey.is-map-only .cover { margin-bottom: 0; }
+.journey.is-map-only .journal { display: none; }
 .story-panel {
   width: min(53%, 45rem);
   margin-bottom: clamp(5rem, 22vh, 13rem);
@@ -217,6 +221,16 @@ h1, h2, p, figure { margin: 0; }
   .story-panel > .paper-surface { padding: 2.3rem var(--edge); }
   .story-panel + .story-panel > .paper-surface { border-top: 1px solid var(--color-rule); }
   .chapter-head h2 { scroll-margin-top: calc(var(--dock-height) + 1rem); }
+  /* Stack the cover heading above a map that fills the rest of the viewport. The masthead sits above the journey on small screens. */
+  .journey.is-map-only { display: flex; flex-direction: column; min-height: calc(100svh - 3.4rem); }
+  .journey.is-map-only .atlas {
+    position: relative;
+    flex: 1 1 auto;
+    align-self: stretch;
+    width: auto;
+    height: auto;
+    min-height: 22rem;
+  }
 }
 
 @media (max-width: 480px) {

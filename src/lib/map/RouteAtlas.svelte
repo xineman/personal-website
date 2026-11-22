@@ -9,6 +9,7 @@
     framing: MapFraming | undefined;
     scrollPosition: number;
     exploring: boolean;
+    mapOnly: boolean;
     onExplore: (open: boolean, drag?: ScreenPoint) => void;
     onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
@@ -16,40 +17,48 @@
     toggle?: HTMLButtonElement;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, onExplore, onReturnCamera, onChapter, element = $bindable(), toggle = $bindable() }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, mapOnly, onExplore, onReturnCamera, onChapter, element = $bindable(), toggle = $bindable() }: Props = $props();
   const active = $derived(chapters[Math.min(position.chapter, chapters.length - 1)]);
   const place = $derived(position.percent === 100 ? 'North Cape reached' : active?.title ?? 'Rovereto to North Cape');
-  const onRight = $derived(position.chapter % 2 === 1 || position.chapter >= chapters.length);
+  const onRight = $derived(!mapOnly && (position.chapter % 2 === 1 || position.chapter >= chapters.length));
   let ready = $state(false);
 </script>
 
-<aside class="atlas" class:exploring class:panel-right={onRight} id="route" aria-label="Route" bind:this={element}>
+<aside class="atlas" class:exploring class:map-only={mapOnly} class:panel-right={onRight} id="route" aria-label="Route" bind:this={element}>
   <section class="map-sheet" role={exploring ? 'dialog' : undefined} aria-modal={exploring ? true : undefined}
-    aria-label="Interactive map of the ride" aria-describedby={exploring ? 'map-gesture' : undefined}>
-    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {onExplore} {onReturnCamera} {onChapter} bind:ready />
+    aria-label="Interactive map of the ride" aria-describedby={exploring || mapOnly ? 'map-gesture' : undefined}>
+    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {mapOnly} {onExplore} {onReturnCamera} {onChapter} bind:ready />
 
     {#if ready}
-      <div class="reading-status">
-        <div class="reading-value" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={position.percent}>
-          <span>{position.percent}%</span> read
+      {#if !mapOnly}
+        <div class="reading-status">
+          <div class="reading-value" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={position.percent}>
+            <span>{position.percent}%</span> read
+          </div>
+          <p>{place}</p>
         </div>
-        <p>{place}</p>
-      </div>
+      {/if}
       <div class="map-compass" aria-label="North is up">
         <span>N</span>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 6 20l6-4 6 4-6-16Zm0 1v11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
       </div>
-      <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
-        {exploring ? 'Back to story' : 'Explore map'}
-      </button>
-      {#if exploring}
+      {#if !mapOnly}
+        <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
+          {exploring ? 'Back to story' : 'Explore map'}
+        </button>
+      {/if}
+      {#if exploring || mapOnly}
         <p id="map-gesture" class="map-gesture">
           <span class="mouse">Hover over the route · Click to pin</span>
           <span class="touch">Tap the route for ride data</span>
         </p>
       {/if}
       <p class="map-key" aria-label="Route legend">
-        <span><i></i>Read</span><span><i></i>Ahead</span><span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
+        {#if mapOnly}
+          <span><i></i>Route</span><span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
+        {:else}
+          <span><i></i>Read</span><span><i></i>Ahead</span><span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
+        {/if}
       </p>
     {/if}
   </section>
@@ -119,7 +128,11 @@
   @media (min-width: 1061px) {
     .atlas, .map-sheet { pointer-events: none; }
     .explore { pointer-events: auto; }
+    .atlas.map-only .map-compass { top: 1.35rem; }
+    .atlas.map-only .map-key { right: 1.25rem; }
   }
+  /* With the journal hidden, the atlas is the page and takes pointer input everywhere. */
+  .atlas.map-only, .atlas.map-only .map-sheet { pointer-events: auto; }
   @media (min-width: 1181px) {
     .panel-right:not(.exploring) .map-key { right: auto; left: var(--edge); }
   }
@@ -134,6 +147,7 @@
     .map-key { display: none; }
     .exploring .map-key { display: flex; inset: 8.9rem auto auto .55rem; max-width: 10rem; }
     .map-gesture { inset: 6.7rem auto auto .55rem; }
+    .atlas.map-only .map-gesture { inset: .55rem auto auto .55rem; }
   }
   @media print, (scripting: none) {
     .atlas { display: none; }

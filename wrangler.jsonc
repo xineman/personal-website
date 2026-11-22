@@ -3,6 +3,9 @@
   "name": "personal-website",
   "compatibility_date": "2026-11-19",
   "main": ".svelte-kit/cloudflare/_worker.js",
+  "flagship": [
+    { "binding": "FLAGS", "app_id": "92434a89-72bc-40cd-af9d-223277baf956" }
+  ],
   "assets": {
     "binding": "ASSETS",
     "directory": ".svelte-kit/cloudflare"

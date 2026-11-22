@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { asset } from '$app/paths';
+  import { readArticleVisibility } from '#lib/flags.js';
   import RouteAtlas from '#lib/map/RouteAtlas.svelte';
   import type { ReadingPosition } from '#lib/map/route-progress.js';
   import type { MapFraming, ScreenPoint } from '#lib/map/route-data.js';
@@ -13,7 +14,10 @@
   const day = (number: number) => String(number).padStart(2, '0');
   const chapters = article.chapters.map((chapter, index) => ({ ...chapter, number: day(index + 1) }));
   const clamp = (value: number) => Math.max(0, Math.min(1, value));
+  // With the flag on there is no reading position, so the atlas shows the completed route.
+  const completeRide: ReadingPosition = { chapter: chapters.length, fraction: 1, percent: 100 };
 
+  let articleHidden = $state(false);
   let position = $state<ReadingPosition>({ chapter: -1, fraction: 0, percent: 0 });
   let framing = $state<MapFraming>();
   let scrollPosition = $state(0);
@@ -38,6 +42,8 @@
   let alternating: MediaQueryList;
   let reducedMotion: MediaQueryList;
 
+  const atlasPosition = $derived(articleHidden ? completeRide : position);
+
   function getPhoto(key: string) {
     const photo = photosByKey[key];
     if (!photo) throw new Error(`Unknown journal photo: ${key}`);
@@ -46,7 +52,7 @@
 
   function updateReading() {
     frame = undefined;
-    if (exploring || !atlas || !sections.length) return;
+    if (articleHidden || exploring || !atlas || !journal || !sections.length) return;
     scrollPosition = window.scrollY;
     const page = document.documentElement;
     const maxScroll = page.scrollHeight - page.clientHeight;
@@ -164,15 +170,20 @@
   }
 
   onMount(() => {
+    const controller = new AbortController();
+    void readArticleVisibility(controller.signal).then(({ hidden }) => {
+      if (!controller.signal.aborted) articleHidden = hidden;
+    });
     docked = matchMedia('(max-width: 1060px)');
     alternating = matchMedia('(min-width: 1181px)');
     reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-    sections = Array.from(journal.querySelectorAll<HTMLElement>('[data-chapter]'));
+    sections = journal ? Array.from(journal.querySelectorAll<HTMLElement>('[data-chapter]')) : [];
     const resize = new ResizeObserver(scheduleReading);
-    resize.observe(journal);
+    if (journal) resize.observe(journal);
     resize.observe(document.body);
     scheduleReading();
     return () => {
+      controller.abort();
       resize.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.documentElement.classList.remove('is-map-exploring');
@@ -208,7 +219,9 @@
   {/each}
 {/snippet}
 
-<a class="skip-link" href="#story" inert={exploring}>Skip to the story</a>
+{#if !articleHidden}
+  <a class="skip-link" href="#story" inert={exploring}>Skip to the story</a>
+{/if}
 <header class="masthead" inert={exploring}>
   <a class="masthead__title" href="#top" aria-label="NorthCape 4000, top of page">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 1v22M1 12h22M12 4.5l4 7.5-4 7.5-4-7.5Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M12 4.5 16 12h-4V4.5Z" fill="currentColor"/></svg>
@@ -216,22 +229,24 @@
   </a>
 </header>
 
-<main class="journey" class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
+<main class="journey" class:is-map-only={articleHidden} class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
   <section class="cover" aria-labelledby="cover-title" inert={exploring} bind:this={cover}>
     <div class="paper-surface" bind:this={coverPaper}>
       <div class="paper-content">
         <h1 id="cover-title">The long<br> way north</h1>
         <p>From the Italian Alps to the edge of Europe by bicycle.</p>
         <p class="ride-facts">≈3,825 km <span></span> 22 days <span></span> 2022</p>
-        <a class="cover__action" href="#story">
-          Read the story
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m-5-5 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </a>
+        {#if !articleHidden}
+          <a class="cover__action" href="#story">
+            Read the story
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m-5-5 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+        {/if}
       </div>
     </div>
   </section>
 
-  <RouteAtlas {chapters} {position} {framing} {scrollPosition} {exploring} onExplore={setExploring}
+  <RouteAtlas {chapters} position={atlasPosition} {framing} {scrollPosition} {exploring} mapOnly={articleHidden} onExplore={setExploring}
     onReturnCamera={(offset) => { returnOffset = offset; }} onChapter={jumpToChapter} bind:element={atlas} bind:toggle />
 
   <article class="journal" aria-labelledby="story" inert={exploring} bind:this={journal} style:--paper-dock-inset={`${paperDockInset}px`}>
@@ -270,13 +285,15 @@
   </article>
 </main>
 
-<footer class="journal__footer" inert={exploring}>
-  <nav id="chapters" aria-label="Chapter stops">
-    <ul>
-      {#each chapters as chapter (chapter.id)}
-        <li><a href={'#' + chapter.id} title={chapter.title}>{chapter.pin}</a></li>
-      {/each}
-    </ul>
-  </nav>
-  <a href="#top">Back to the start</a>
-</footer>
+{#if !articleHidden}
+  <footer class="journal__footer" inert={exploring}>
+    <nav id="chapters" aria-label="Chapter stops">
+      <ul>
+        {#each chapters as chapter (chapter.id)}
+          <li><a href={'#' + chapter.id} title={chapter.title}>{chapter.pin}</a></li>
+        {/each}
+      </ul>
+    </nav>
+    <a href="#top">Back to the start</a>
+  </footer>
+{/if}
