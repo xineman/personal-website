@@ -42,7 +42,7 @@
 
   const elevation = $derived(elevationAtDistance(routeElevation, distance));
   const readings = $derived([
-    { label: 'Estimated speed', value: sample?.[3] == null ? null : decimal.format(sample[3]), unit: 'km/h' },
+    { label: 'Estimated speed', value: sample?.[3] == null ? null : number.format(Math.round(sample[3])), unit: 'km/h' },
     { label: 'Elevation', value: elevation === null ? null : number.format(Math.round(elevation)), unit: 'm' },
     { label: 'Heart rate', value: sample?.[4] == null ? null : number.format(sample[4]), unit: 'bpm' }
   ].filter(({ value }) => value !== null));

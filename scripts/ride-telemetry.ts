@@ -10,6 +10,7 @@ export interface GpxPoint {
 
 const maxInterval = 4;
 const maxSpeed = 95;
+const speedSmoothingRadius = 15; // seconds on either side of a reading
 
 export function buildTelemetry(points: GpxPoint[], kept: number[], offset: number): RideData {
   let distance = offset;
@@ -34,14 +35,37 @@ export function buildTelemetry(points: GpxPoint[], kept: number[], offset: numbe
     for (let i = index; i < Math.min(steps.length, index + 5) && steps[i] !== null; i++) window.push(steps[i]!);
     if (window.length < 4) return null;
     window.sort((a, b) => a - b);
-    return Math.round(window[Math.floor(window.length / 2)] * 10) / 10;
+    return window[Math.floor(window.length / 2)];
+  }
+
+  const speeds = points.map((_, index) => estimateSpeed(index));
+
+  function smoothSpeed(index: number) {
+    const speed = speeds[index];
+    const timestamp = points[index].timestamp;
+    if (speed === null || timestamp === null) return null;
+    let total = speed;
+    let weight = 1;
+    // Taper the influence of nearby estimates without crossing a recording gap.
+    for (const direction of [-1, 1]) {
+      for (let i = index + direction; i >= 0 && i < speeds.length; i += direction) {
+        const nearbySpeed = speeds[i];
+        const nearbyTime = points[i].timestamp;
+        if (nearbySpeed === null || nearbyTime === null) break;
+        const influence = 1 - Math.abs(nearbyTime - timestamp) / speedSmoothingRadius;
+        if (influence <= 0) break;
+        total += nearbySpeed * influence;
+        weight += influence;
+      }
+    }
+    return Math.round(total / weight * 10) / 10;
   }
 
   const samples: RideSample[] = [];
   let previous: RideSample | undefined;
   for (let index = 0; index < points.length; index++) {
     const { elevation, timestamp, heartRate } = points[index];
-    const current: RideSample = [Math.round(distances[index]), elevation, timestamp, estimateSpeed(index), heartRate];
+    const current: RideSample = [Math.round(distances[index]), elevation, timestamp, smoothSpeed(index), heartRate];
     const last = samples.at(-1);
     const availabilityChanged = previous && (previous[3] === null) !== (current[3] === null);
     if (!last || index === points.length - 1 || availabilityChanged || current[0] - last[0] >= 20 ||

@@ -42,12 +42,16 @@ export function isRecordingGap(a: RideSample, b: RideSample) {
   return a[2] !== null && b[2] !== null && b[0] - a[0] > 200 && b[2] - a[2] > 120;
 }
 
-export function rideSample(data: RideData, distance: number) {
+export function rideSample(data: RideData, distance: number): RideSample | undefined {
   const index = indexAtDistance(data.samples, distance, (sample) => sample[0]);
   const next = data.samples[index];
   const previous = data.samples[index - 1];
   if (previous && distance < next[0] && isRecordingGap(previous, next)) return undefined;
-  return previous && distance - previous[0] < next[0] - distance ? previous : next;
+  const closest = previous && distance - previous[0] < next[0] - distance ? previous : next;
+  if (!previous || distance >= next[0] || previous[3] === null || next[3] === null) return closest;
+  const fraction = (distance - previous[0]) / (next[0] - previous[0]);
+  const speed = previous[3] + fraction * (next[3] - previous[3]);
+  return [closest[0], closest[1], closest[2], speed, closest[4]];
 }
 
 export function elevationAtDistance(samples: ElevationPoint[], distance: number): number | null {
