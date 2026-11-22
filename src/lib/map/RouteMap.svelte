@@ -2,6 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { asset } from '$app/paths';
+  import posthog from 'posthog-js';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import type { GeoJSONSource, JumpToOptions, LngLatBounds, Map as MapLibreMap, MapMouseEvent, MapTouchEvent, Marker } from 'maplibre-gl';
   import RidePopup from './RidePopup.svelte';
@@ -451,6 +452,10 @@
           const profile = route.elevationProfile;
           if (!profile) return;
           const pinned = input !== 'hover';
+          if (pinned) {
+            posthog.capture('route_point_inspected', { input_method: input });
+            posthog.logger.info('Route point inspected', { input_method: input });
+          }
           if (pinned && inspectionPan) instance.stop();
           if (pinned && inspection && inspection.order !== hit.order) clearInspection();
           if (!inspection && !pendingInspection) resizeInspectionProfile();
