@@ -9,6 +9,12 @@ export function init() {
 	posthog.init(PUBLIC_POSTHOG_KEY, {
 		api_host: PUBLIC_POSTHOG_HOST,
 		capture_exceptions: true,
+		session_recording: {
+			captureCanvas: { recordCanvas: true },
+			canvasCapture: {
+				maskRegionsFn: (canvas) => canvas.classList.contains('maplibregl-canvas') ? [] : null
+			}
+		},
 		logs: {
 			serviceName: 'northcape-cycling-journal',
 			environment: dev ? 'development' : 'production'

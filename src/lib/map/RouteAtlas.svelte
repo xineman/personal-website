@@ -153,7 +153,7 @@
     .exploring .map-key { display: flex; inset: 9.25rem auto auto .55rem; max-width: 10rem; }
     .map-gesture { inset: 6.7rem auto auto .55rem; }
   }
-  @media print, (scripting: none) {
+  @media print {
     .atlas { display: none; }
   }
 </style>

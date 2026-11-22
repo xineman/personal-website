@@ -2,6 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { asset } from '$app/paths';
+  import { PUBLIC_POSTHOG_HOST, PUBLIC_POSTHOG_KEY } from '$app/env/public';
   import posthog from 'posthog-js';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import type { GeoJSONSource, JumpToOptions, LngLatBounds, Map as MapLibreMap, MapMouseEvent, MapTouchEvent, Marker } from 'maplibre-gl';
@@ -379,6 +380,7 @@
 
         const instance = map = new lib.Map({
           container: host,
+          canvasContextAttributes: { preserveDrawingBuffer: Boolean(PUBLIC_POSTHOG_KEY && PUBLIC_POSTHOG_HOST) },
           style: atlasStyle(course.data, chapters),
           bounds: routeBounds,
           fitBoundsOptions: { padding: 24 },

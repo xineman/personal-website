@@ -226,8 +226,10 @@ h1, h2, p, figure { margin: 0; }
 }
 
 @media (scripting: none) {
-  .journey { display: block; }
-  .story-panel { width: min(100%, 45rem); margin-inline: auto; }
+  /* Replay iframes disable scripts after capturing the hydrated page. */
+  .journey:not(.is-hydrated) { display: block; }
+  .journey:not(.is-hydrated) .atlas { display: none; }
+  .journey:not(.is-hydrated) .story-panel { width: min(100%, 45rem); margin-inline: auto; }
 }
 
 @media print {

@@ -18,6 +18,7 @@
   let position = $state<ReadingPosition>({ chapter: -1, fraction: 0, percent: 0 });
   let framing = $state<MapFraming>();
   let scrollPosition = $state(0);
+  let hydrated = $state(false);
   let exploring = $state(false);
   let paperHidden = $state(false);
   let positioningPaper = $state(false);
@@ -171,6 +172,7 @@
   }
 
   onMount(() => {
+    hydrated = true;
     docked = matchMedia('(max-width: 1060px)');
     alternating = matchMedia('(min-width: 1181px)');
     reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -223,7 +225,7 @@
   </a>
 </header>
 
-<main class="journey" class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
+<main class="journey" class:is-hydrated={hydrated} class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
   <section class="cover" aria-labelledby="cover-title" inert={exploring} bind:this={cover}>
     <div class="paper-surface" bind:this={coverPaper}>
       <div class="paper-content">
