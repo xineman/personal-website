@@ -2,6 +2,7 @@
   import RouteMap from './RouteMap.svelte';
   import type { MapFraming, RouteChapter, ScreenPoint } from './route-data.js';
   import type { ReadingPosition } from './route-progress.js';
+  import type { PhotoLayout } from './route-photo-layout.js';
 
   interface Props {
     chapters: RouteChapter[];
@@ -23,15 +24,19 @@
   const onRight = $derived(!articleHidden && (position.chapter % 2 === 1 || position.chapter >= chapters.length));
   const returnLabel = $derived(articleHidden ? 'Back to overview' : 'Back to story');
   let ready = $state(false);
+  let photoPane = $state<PhotoLayout>();
 </script>
 
 <aside class="atlas" class:exploring class:article-hidden={articleHidden} class:panel-right={onRight} id="route" tabindex="-1" aria-label="Route" bind:this={element}>
-  <section class="map-sheet" role={exploring ? 'dialog' : undefined} aria-modal={exploring ? true : undefined}
-    aria-label="Interactive map of the ride" aria-describedby={exploring ? 'map-gesture' : undefined}>
-    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {articleHidden} {onExplore} {onReturnCamera} {onChapter} bind:ready />
+  <section class="map-sheet" class:photo-side={photoPane === 'side'} class:photo-below={photoPane === 'below'}
+    class:photo-fullscreen={photoPane === 'fullscreen'}
+    role={exploring ? 'dialog' : undefined} aria-modal={exploring ? true : undefined}
+    aria-label="Interactive map of the ride" aria-describedby={exploring && !photoPane ? 'map-gesture' : undefined}>
+    <RouteMap {chapters} {position} {framing} {scrollPosition} {exploring} {articleHidden} {onExplore} {onReturnCamera} {onChapter}
+      bind:ready bind:photoPane />
 
     {#if ready}
-      {#if !articleHidden}
+      {#if !articleHidden && !photoPane}
         <div class="reading-status">
           <div class="reading-value" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={position.percent}>
             <span>{position.percent}%</span> read
@@ -47,21 +52,21 @@
         <button class="explore" type="button" onclick={() => onExplore(!exploring)} aria-expanded={exploring} bind:this={toggle}>
           {exploring ? returnLabel : 'Explore map'}
         </button>
-        <p class="map-key" aria-label="Route legend">
+        {#if !photoPane}<p class="map-key" aria-label="Route legend">
           <span><i></i>{articleHidden ? 'Route' : 'Read'}</span>
           {#if !articleHidden}<span><i></i>Ahead</span>{/if}
           <span class="ferry"><i></i>Ferry</span><span class="official"><i></i>Official course</span>
-        </p>
+        </p>{/if}
       </div>
-      {#if exploring}
+      {#if exploring && !photoPane}
         <p id="map-gesture" class="map-gesture">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="m3 19 4-8 4 1m5-3 5-4" />
             <circle cx="13.5" cy="11" r="3" fill="var(--color-route)" />
           </svg>
-          <span class="mouse"><strong>Click the route line</strong> to pin ride data</span>
-          <span class="touch"><strong>Tap the route line</strong> to pin ride data</span>
+          <span class="mouse"><strong>Click the route</strong> for ride data or a photo to open it</span>
+          <span class="touch"><strong>Tap the route</strong> for ride data or a photo to open it</span>
         </p>
       {/if}
     {/if}
@@ -113,6 +118,9 @@
   }
   .explore:hover { background: var(--color-route); }
   .explore:focus-visible { outline-offset: -4px; }
+  .photo-side :is(.map-actions,.map-compass) { margin-right: 47%; }
+  .photo-below .map-actions { bottom: calc(100% - max(45dvh, 250px) + 2.25rem); }
+  .photo-fullscreen :is(.explore,.map-compass) { visibility: hidden; }
   .map-key { display: flex; flex-wrap: wrap; gap: .35rem .8rem; padding: .35rem .65rem; }
   .map-key span { display: inline-flex; align-items: center; gap: .33rem; }
   .map-key i { width: .9rem; border-top: 2px solid var(--color-unread); }
@@ -165,6 +173,8 @@
     .map-compass { top: .5rem; right: .75rem; }
     .map-actions { display: contents; }
     .explore { position: absolute; right: .55rem; bottom: 1.85rem; font-size: .76rem; }
+    .photo-side .explore { right: calc(47% + .55rem); }
+    .photo-below .explore { bottom: calc(100% - max(45dvh, 250px) + 1.85rem); }
     .map-key { display: none; }
     .exploring .map-key { position: absolute; display: flex; inset: 9.25rem auto auto .55rem; max-width: 10rem; }
     .map-gesture { inset: 6.7rem auto auto .55rem; }

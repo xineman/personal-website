@@ -373,7 +373,7 @@
 </div>
 
 <style>
-  .ride-overlay { position: absolute; inset: 0; z-index: 1; pointer-events: none; color: var(--color-ink); }
+  .ride-overlay { position: absolute; inset: 0; z-index: 4; pointer-events: none; color: var(--color-ink); }
   .leader { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; }
   .map-point {
     position: absolute; width: 19px; height: 19px; transform: translate(-50%, -50%);

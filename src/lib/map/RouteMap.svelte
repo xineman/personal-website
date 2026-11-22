@@ -7,7 +7,12 @@
   import 'maplibre-gl/dist/maplibre-gl.css';
   import type { GeoJSONSource, JumpToOptions, LngLatBounds, Map as MapLibreMap, MapMouseEvent, MapTouchEvent, Marker } from 'maplibre-gl';
   import RidePopup from './RidePopup.svelte';
-  import type { Coordinates, MapFraming, RouteChapter, RouteData, ScreenPoint } from './route-data.js';
+  import RoutePhotos from './RoutePhotos.svelte';
+  import article from '../../../content/article.json';
+  import photoAnchors from '../../../content/route-photos.json';
+  import { earthRadius, type Coordinates, type MapFraming, type RouteChapter, type RouteData, type ScreenPoint } from './route-data.js';
+  import { mapSpace, photoAnchor, type PhotoBox, type PhotoLayout, type ProjectedPhoto, type RoutePhoto } from './route-photo-layout.js';
+  import { readRoutePhotoFile } from './photo-import.js';
   import { prepareRoute, type ReadingPosition } from './route-progress.js';
   import { atlasStyle, completedFilter, completedRouteLayers, inspectedRouteSource, partialRouteSource, routeHitLayer } from './map-style.js';
   import { rideSample, rideWindow, routeCoordinate, type RideData, type RideWindow, type RouteElevationData } from './ride-data.js';
@@ -18,6 +23,8 @@
   type InspectionHit = RouteHit & { input: InspectionInput };
   type RideSelection = { order: number; distance: number; input: InspectionInput };
   type Inspection = RideSelection & { window: RideWindow; coordinate: Coordinates };
+  type PhotoLocation = Pick<RoutePhoto, 'coordinates' | 'day'>;
+  type UnplacedPhoto = Omit<RoutePhoto, keyof PhotoLocation>;
 
   interface Props {
     chapters: RouteChapter[];
@@ -30,9 +37,11 @@
     onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
     ready: boolean;
+    photoPane?: PhotoLayout;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, articleHidden, onExplore, onReturnCamera, onChapter, ready = $bindable(false) }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, articleHidden, onExplore, onReturnCamera, onChapter,
+    ready = $bindable(false), photoPane = $bindable() }: Props = $props();
   let host: HTMLDivElement;
   let map: MapLibreMap | undefined;
   let routeBounds: LngLatBounds;
@@ -64,6 +73,27 @@
   let highlighted: RideWindow | undefined;
   let inspectionNotice = $state('');
   let pendingInspection: InspectionHit | undefined;
+  let photoOrigin: JumpToOptions | undefined;
+  let photoViewPoint: ScreenPoint | undefined;
+  let focusedPhoto: RoutePhoto | undefined;
+  let photoViewer = $state<ReturnType<typeof RoutePhotos>>();
+  let projectedPhotos = $state.raw<ProjectedPhoto[]>([]);
+  let photoCameraMoving = $state(false);
+  let localPhotos = $state.raw<RoutePhoto[]>([]);
+  let photoQueue = $state.raw<UnplacedPhoto[]>([]);
+  let photoInput = $state<HTMLInputElement>();
+  let photoNotice = $state('');
+  let importingPhotos = $state(false);
+  let importAlive = true;
+  let placePhotoNearCenter: (() => void) | undefined;
+  const uploadUrls = new Set<string>();
+  const ridePhotos: RoutePhoto[] = photoAnchors.map(({ key, coordinates, day, time, note }) => {
+    const imageKey = key as keyof typeof article.images;
+    const { alt, caption, date, width, height } = article.images[imageKey];
+    return { id: key, src: asset(`assets/${imageKey}.webp`), alt, caption, date, width, height,
+      coordinates: [coordinates[0], coordinates[1]], day, time, note };
+  });
+  const photos = $derived([...ridePhotos, ...localPhotos]);
   const minZoom = 0.5;
   const maxZoom = 16;
   const inspectedTrack = $derived(inspection && rideCourse?.tracks[inspection.order]);
@@ -145,6 +175,10 @@
       instance.scrollZoom.enable();
     } else {
       clearInspection();
+      photoPane = undefined;
+      photoOrigin = undefined;
+      photoViewPoint = undefined;
+      focusedPhoto = undefined;
       instance.cooperativeGestures.enable();
       instance.scrollZoom.disable();
       followsStory = readingView?.follows ?? true;
@@ -214,6 +248,129 @@
       marker.getElement().inert = x < 0 || x > width || y < 0 || y > height;
     }
     projectInspection();
+    if (mode) projectPhotos(instance, photos);
+  }
+
+  function projectPhotos(instance: MapLibreMap, source: RoutePhoto[]) {
+    projectedPhotos = source.map((photo) => ({ photo, point: instance.project(photo.coordinates) }));
+  }
+
+  function photoOverlapsRoute({ x, y, width, height }: PhotoBox) {
+    if (!map?.getLayer(routeHitLayer)) return false;
+    const clearance = 6;
+    return map.queryRenderedFeatures([[x - clearance, y - clearance],
+      [x + width + clearance, y + height + clearance]], { layers: [routeHitLayer] }).length > 0;
+  }
+
+  function zoomOverPhoto(event: WheelEvent) {
+    if (!mode || !map?.scrollZoom.isEnabled() || event.defaultPrevented) return;
+    // Photo overlays sit above the canvas. Let MapLibre handle wheel speed and zoom around the pointer.
+    const handled = !map.getCanvas().dispatchEvent(new WheelEvent('wheel', event));
+    if (handled) event.preventDefault();
+  }
+
+  function focusPhoto(photo?: RoutePhoto, layout?: PhotoLayout) {
+    if (!map || !mode) return;
+    photoPane = layout;
+    focusedPhoto = photo;
+    if (!photo) {
+      if (photoOrigin) map.easeTo({ ...photoOrigin, duration: 280 });
+      photoOrigin = undefined;
+      photoViewPoint = undefined;
+      return;
+    }
+    clearInspection();
+    map.getCanvas().style.cursor = '';
+    if (layout === 'fullscreen') return;
+    const point = map.project(photo.coordinates);
+    const shared = mapSpace(viewport);
+    const wasSplit = Boolean(photoOrigin);
+    photoOrigin ??= { center: map.getCenter(), zoom: map.getZoom() };
+    photoViewPoint = photoAnchor(photoViewPoint ?? point, viewport);
+    if (wasSplit && point.x >= 36 && point.x <= shared.width - 42 &&
+      point.y >= 54 && point.y <= shared.height - 38) return;
+    if (Math.hypot(point.x - photoViewPoint.x, point.y - photoViewPoint.y) < 1) return;
+    map.easeTo({ center: photo.coordinates,
+      offset: [photoViewPoint.x - viewport.width / 2, photoViewPoint.y - viewport.height / 2],
+      duration: 340, easing: (t) => 1 - (1 - t) ** 3 });
+  }
+
+  function dismissPhotoDuringGesture() {
+    if (!photoPane || !photoViewer) return;
+    photoOrigin = undefined;
+    void photoViewer.close();
+  }
+
+  function photoLocation({ order, edge, fraction }: RouteHit): PhotoLocation {
+    const { geometry: { coordinates }, properties: { day } } = course.data.features[order];
+    const a = coordinates[edge];
+    const b = coordinates[edge + 1];
+    return { coordinates: [a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction], day };
+  }
+
+  function snapPhotoLocation([lon, lat]: Coordinates): PhotoLocation | undefined {
+    const metresPerDegree = earthRadius * Math.PI / 180;
+    const longitudeScale = Math.cos(lat * Math.PI / 180);
+    const orders = course.data.features.flatMap(({ properties }, order) => properties.kind === 'ride' ? [order] : []);
+    const hit = nearestRouteHit({ x: 0, y: 0 }, orders, (order) =>
+      course.data.features[order].geometry.coordinates.map(([x, y]) => ({
+        x: (x - lon) * longitudeScale * metresPerDegree, y: (y - lat) * metresPerDegree
+      })), 1400);
+    if (hit) return photoLocation(hit);
+  }
+
+  function placePhoto(hit: RouteHit) {
+    const [photo, ...rest] = photoQueue;
+    if (!photo) return;
+    localPhotos = [...localPhotos, { ...photo, ...photoLocation(hit) }];
+    photoQueue = rest;
+    photoNotice = 'Photo added to the route.';
+  }
+
+  function skipPhoto() {
+    const [photo, ...rest] = photoQueue;
+    if (!photo) return;
+    URL.revokeObjectURL(photo.src);
+    uploadUrls.delete(photo.src);
+    photoQueue = rest;
+    photoNotice = '';
+  }
+
+  async function importPhotos(input: HTMLInputElement) {
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (!files.length || importingPhotos) return;
+    clearInspection();
+    importingPhotos = true;
+    let added = 0;
+    let failed = 0;
+    try {
+      for (const file of files) {
+        let image: Awaited<ReturnType<typeof readRoutePhotoFile>>;
+        try {
+          image = await readRoutePhotoFile(file);
+        } catch {
+          failed++;
+          continue;
+        }
+        if (!importAlive) {
+          URL.revokeObjectURL(image.src);
+          return;
+        }
+        uploadUrls.add(image.src);
+        const photo: UnplacedPhoto = { id: crypto.randomUUID(), src: image.src, alt: image.title,
+          caption: image.title, width: image.width, height: image.height, time: image.time };
+        const location = image.coordinates && snapPhotoLocation(image.coordinates);
+        if (location) {
+          added++;
+          localPhotos = [...localPhotos, { ...photo, ...location }];
+        } else photoQueue = [...photoQueue, photo];
+      }
+    } finally {
+      importingPhotos = false;
+    }
+    photoNotice = [added ? `Added ${added} ${added === 1 ? 'photo' : 'photos'}.` : '',
+      failed ? `Couldn’t open ${failed} ${failed === 1 ? 'image' : 'images'}.` : ''].filter(Boolean).join(' ');
   }
 
   function isInViewport({ x, y }: ScreenPoint) {
@@ -352,6 +509,11 @@
     untrack(() => showProgress(current));
   });
 
+  $effect(() => {
+    if (!ready || !exploring || !map) return;
+    projectPhotos(map, photos);
+  });
+
   onMount(() => {
     const controller = new AbortController();
     let observer: IntersectionObserver | undefined;
@@ -422,13 +584,14 @@
           return response.json();
         }
 
-        function inspectAt(point: ScreenPoint, radius?: number) {
-          if (!route.elevationProfile) return;
+        function inspectAt(point: ScreenPoint, radius?: number, placingPhoto = false) {
+          if ((!placingPhoto && !route.elevationProfile) || !instance.getLayer(routeHitLayer)) return;
           const matches = radius === undefined ? instance.queryRenderedFeatures(routeQuery) : instance.queryRenderedFeatures(
             [[point.x - radius, point.y - radius], [point.x + radius, point.y + radius]], routeQuery
           );
-          const orders = new Set<number>(matches.flatMap(({ properties: { order, telemetry, day } }) =>
-            typeof order === 'number' && typeof telemetry === 'string' && typeof day === 'number' ? [order] : []
+          const orders = new Set<number>(matches.flatMap(({ properties: { order, telemetry, day, kind } }) =>
+            typeof order === 'number' && typeof day === 'number' &&
+              (placingPhoto ? kind === 'ride' : typeof telemetry === 'string') ? [order] : []
           ));
           return nearestRouteHit(point, orders, (order) => {
             let path = screenPaths.get(order);
@@ -439,6 +602,12 @@
             return path;
           }, radius ?? Infinity, radius === undefined ? viewport : undefined);
         }
+
+        placePhotoNearCenter = () => {
+          const hit = inspectAt({ x: viewport.width / 2, y: viewport.height / 2 }, undefined, true);
+          if (hit) placePhoto(hit);
+          else photoNotice = 'Move the map until the ride route is visible.';
+        };
 
         function displayInspection({ order, edge, fraction, input }: InspectionHit) {
           const vertices = rideCourse?.tracks[order]?.vertices;
@@ -536,6 +705,11 @@
             pin.appendChild(label);
 
             pin.addEventListener('click', (event) => {
+              if (photoPane) {
+                event.preventDefault();
+                void photoViewer?.close();
+                return;
+              }
               if (articleHidden) {
                 const hit = inspectAt(instance.project(coordinates), 36);
                 if (!mode) onExplore(true);
@@ -565,6 +739,7 @@
               instance.getCanvas().style.cursor = !overPin && routeAt(event.point)?.chapterId ? 'pointer' : '';
               return;
             }
+            if (photoQueue.length || photoPane) return;
             if (isInspectionPinned() || instance.isMoving()) return;
             if (overPin) {
               stopHover();
@@ -587,6 +762,16 @@
           });
           instance.on('click', (event) => {
             if ((event.originalEvent.target as Element).closest('.chapter-pin')) return;
+            if (mode && photoQueue.length) {
+              const hit = inspectAt(event.point, 24, true);
+              if (hit) placePhoto(hit);
+              else photoNotice = 'Select a point on the recorded ride line.';
+              return;
+            }
+            if (photoPane) {
+              void photoViewer?.close();
+              return;
+            }
             if (mode || articleHidden) {
               stopHover();
               const hit = inspectAt(event.point, 16);
@@ -611,6 +796,12 @@
               clearInspection(true);
             }
             if (event.key === 'Enter' && event.target === instance.getCanvas()) {
+              if (photoQueue.length) {
+                event.preventDefault();
+                placePhotoNearCenter?.();
+                return;
+              }
+              if (photoPane) return;
               const hit = inspectAt({ x: viewport.width / 2, y: viewport.height / 2 });
               if (!hit) return;
               event.preventDefault();
@@ -624,6 +815,7 @@
 
         followReading();
         instance.on('movestart', (event) => {
+          photoCameraMoving = true;
           if (event.originalEvent) followsStory = false;
           stopHover();
           if (!isInspectionPinned()) clearInspection();
@@ -633,11 +825,15 @@
           updateMarkers(instance);
         });
         instance.on('moveend', (event) => {
+          photoCameraMoving = false;
           if (inspectionPan) {
             if (!('inspectionPan' in event) || event.inspectionPan !== inspectionPan) return;
             inspectionPan = undefined;
           }
           if (inspection && inspection.input !== 'hover' && !inspectionPoint) clearInspection();
+        });
+        instance.on('zoomstart', ({ originalEvent }) => {
+          if (originalEvent && photoPane === 'fullscreen') dismissPhotoDuringGesture();
         });
         instance.on('zoom', resizeInspectionProfile);
 
@@ -654,6 +850,7 @@
           followReading();
           updateMarkers(instance);
           resizeInspectionProfile();
+          if (focusedPhoto && photoPane !== 'fullscreen') focusPhoto(focusedPhoto, photoPane);
         }
 
         function prepareDrag({ originalEvent }: MapMouseEvent | MapTouchEvent) {
@@ -666,7 +863,10 @@
         instance.on('touchstart', prepareDrag);
         instance.on('dragstart', ({ originalEvent }) => {
           panning = true;
-          if (exploring) return;
+          if (exploring) {
+            dismissPhotoDuringGesture();
+            return;
+          }
           readingView ??= beforeDrag;
           openingFromDrag = true;
           const current = gesturePosition(originalEvent);
@@ -699,6 +899,8 @@
 
     return () => {
       controller.abort();
+      importAlive = false;
+      for (const src of uploadUrls) URL.revokeObjectURL(src);
       if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
       observer?.disconnect();
       resize?.disconnect();
@@ -742,6 +944,28 @@
   {/if}
   {#if exploring && inspectionNotice}
     <p class="inspection-notice" role="status">{inspectionNotice}</p>
+  {/if}
+  {#if exploring}
+    {#if !photoQueue.length}
+      <RoutePhotos bind:this={photoViewer} points={projectedPhotos} {viewport} cameraMoving={photoCameraMoving}
+        overlapsRoute={photoOverlapsRoute} onFocus={focusPhoto} onMapWheel={zoomOverPhoto} />
+    {/if}
+    <div class="photo-import ph-no-capture">
+      <input type="file" accept="image/*" multiple bind:this={photoInput}
+        class="ph-no-capture" onchange={(event) => importPhotos(event.currentTarget)} hidden />
+      {#if photoQueue[0]}
+        <div class="photo-placement">
+          <img src={photoQueue[0].src} alt="" />
+          <div>
+            <p>Select a point on the recorded ride to place <strong>{photoQueue[0].caption}</strong>.</p>
+            <button type="button" onclick={() => placePhotoNearCenter?.()}>Use nearest visible point</button>
+            <button type="button" onclick={skipPhoto}>Skip</button>
+          </div>
+        </div>
+      {/if}
+      {#if photoNotice || importingPhotos}<p class="photo-notice" role="status">{importingPhotos ? 'Reading photos…' : photoNotice}</p>{/if}
+      {#if !photoPane}<button type="button" disabled={importingPhotos} onclick={() => photoInput?.click()}>Add photos</button>{/if}
+    </div>
   {/if}
 {:else}
   <p class="map-status" role="status">
@@ -855,6 +1079,26 @@
     position: absolute; z-index: 1; bottom: 5.5rem; left: var(--edge); max-width: min(20rem, 72vw);
     padding: .4rem .6rem; background: var(--color-paper); font-size: .76rem; font-weight: 640;
   }
+  .photo-import {
+    position: absolute; z-index: 3; bottom: 2.25rem; left: var(--edge); display: grid;
+    gap: .45rem; justify-items: start; max-width: min(23rem, 66vw); pointer-events: none;
+  }
+  .photo-import button {
+    min-height: 2.5rem; padding: .4rem .65rem; border: 1px solid var(--color-ink);
+    background: var(--color-paper); color: var(--color-ink); font-size: .77rem; font-weight: 730;
+    cursor: pointer; pointer-events: auto;
+  }
+  .photo-import > button,.photo-import button:hover { background: var(--color-route); }
+  .photo-placement,.photo-notice { padding: .5rem .65rem; background: var(--color-paper); font-size: .76rem; }
+  .photo-placement { display: flex; gap: .55rem; align-items: start; pointer-events: auto; }
+  .photo-placement img { width: 3rem; height: 3rem; object-fit: cover; }
+  .photo-placement p { margin-bottom: .35rem; }
+  .photo-placement button { margin: .12rem .25rem .12rem 0; }
+  :global(.map-sheet.photo-side) :is(.map-controls,.attribution) { margin-right: 47%; }
+  :global(.map-sheet.photo-below) .map-controls { bottom: calc(100% - max(45dvh, 250px) + 5.5rem); }
+  :global(.map-sheet.photo-below) .attribution { bottom: calc(100% - max(45dvh, 250px) + .2rem); }
+  :global(.map-sheet.photo-fullscreen) :is(.map-controls,.photo-import) { visibility: hidden; }
+  :global(.map-sheet.photo-fullscreen) .attribution { max-width: 42%; }
 
   @media (min-width: 1181px) {
     :global(.atlas.panel-right:not(.exploring)) .attribution { right: auto; left: .55rem; }
@@ -867,6 +1111,7 @@
     .map-host :global(.chapter-pin__label) { font-size: .72rem; }
     .map-status { top: .55rem; }
     .basemap-status { inset: 4.5rem auto auto .55rem; max-width: 8rem; }
+    .photo-import { left: .55rem; bottom: 1.85rem; }
   }
 
   @media (max-width: 360px) {

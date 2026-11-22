@@ -1,6 +1,8 @@
-# NorthCape 4000
+# Trip and adventure stories
 
-A cycling journal and interactive GPX atlas for the 2022 NorthCape 4000. SvelteKit renders the journal on Cloudflare Workers and serves the route as a static GeoJSON file.
+This project is moving toward a web app for turning personal trips and adventures into standalone stories with writing, photos, and optional route maps. See [PRODUCT.md](PRODUCT.md) for the product direction and the authoring workflow to design next.
+
+The current app serves the 2022 NorthCape 4000 cycling journal and interactive GPX atlas. SvelteKit renders the journal on Cloudflare Workers and serves the route as a static GeoJSON file. The journal is the existing example of a finished story.
 
 ## Development
 
