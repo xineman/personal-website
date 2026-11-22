@@ -300,8 +300,8 @@
   {/if}
 </main>
 
-<footer class="journal__footer" inert={exploring}>
-  {#if !articleHidden}
+{#if !articleHidden}
+  <footer class="journal__footer" inert={exploring}>
     <nav id="chapters" aria-label="Chapter stops">
       <ul>
         {#each chapters as chapter (chapter.id)}
@@ -309,6 +309,6 @@
         {/each}
       </ul>
     </nav>
-  {/if}
-  <a href="#top">Back to the start</a>
-</footer>
+    <a href="#top">Back to the start</a>
+  </footer>
+{/if}
