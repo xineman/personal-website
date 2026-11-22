@@ -20,6 +20,8 @@
   const completeRide: ReadingPosition = { chapter: chapters.length, fraction: 1, percent: 100 };
 
   const articleHidden = $derived(data.articleHidden);
+  // Panning the map should not fight the cover card for the same pixels.
+  let mapTitleHidden = $state(false);
   let position = $state<ReadingPosition>({ chapter: -1, fraction: 0, percent: 0 });
   let framing = $state<MapFraming>();
   let scrollPosition = $state(0);
@@ -175,12 +177,15 @@
     docked = matchMedia('(max-width: 1060px)');
     alternating = matchMedia('(min-width: 1181px)');
     reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    const undock = () => { if (docked.matches) mapTitleHidden = false; };
+    docked.addEventListener('change', undock);
     sections = journal ? Array.from(journal.querySelectorAll<HTMLElement>('[data-chapter]')) : [];
     const resize = new ResizeObserver(scheduleReading);
     if (journal) resize.observe(journal);
     resize.observe(document.body);
     scheduleReading();
     return () => {
+      docked.removeEventListener('change', undock);
       resize.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.documentElement.classList.remove('is-map-exploring');
@@ -220,14 +225,15 @@
   <a class="skip-link" href="#story" inert={exploring}>Skip to the story</a>
 {/if}
 <header class="masthead" inert={exploring}>
-  <a class="masthead__title" href="#top" aria-label="NorthCape 4000, top of page">
+  <a class="masthead__title" href="#top" aria-label="NorthCape 4000, top of page"
+    onclick={(event) => { if (articleHidden) { event.preventDefault(); mapTitleHidden = false; } }}>
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 1v22M1 12h22M12 4.5l4 7.5-4 7.5-4-7.5Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M12 4.5 16 12h-4V4.5Z" fill="currentColor"/></svg>
     NorthCape 4000
   </a>
 </header>
 
-<main class="journey" class:is-map-only={articleHidden} class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
-  <section class="cover" aria-labelledby="cover-title" inert={exploring} bind:this={cover}>
+<main class="journey" class:is-map-only={articleHidden} class:is-map-title-hidden={mapTitleHidden} class:is-paper-hidden={paperHidden} class:is-positioning-paper={positioningPaper} style:--paper-offset={paperOffset}>
+  <section class="cover" aria-labelledby="cover-title" inert={exploring || mapTitleHidden} bind:this={cover}>
     <div class="paper-surface" bind:this={coverPaper}>
       <div class="paper-content">
         <h1 id="cover-title">The long<br> way north</h1>
@@ -244,6 +250,8 @@
   </section>
 
   <RouteAtlas {chapters} position={atlasPosition} {framing} {scrollPosition} {exploring} mapOnly={articleHidden} onExplore={setExploring}
+    onMapInteraction={() => { if (articleHidden && !matchMedia('(max-width: 1060px)').matches) mapTitleHidden = true; }}
+    onMapReset={() => { mapTitleHidden = false; }}
     onReturnCamera={(offset) => { returnOffset = offset; }} onChapter={jumpToChapter} bind:element={atlas} bind:toggle />
 
   {#if !articleHidden}

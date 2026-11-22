@@ -27,10 +27,12 @@
     onExplore: (open: boolean, drag?: ScreenPoint) => void;
     onReturnCamera: (offset: ScreenPoint) => void;
     onChapter: (id: string) => void;
+    onMapInteraction?: () => void;
+    onMapReset?: () => void;
     ready: boolean;
   }
 
-  let { chapters, position, framing, scrollPosition, exploring, mapOnly, onExplore, onReturnCamera, onChapter, ready = $bindable(false) }: Props = $props();
+  let { chapters, position, framing, scrollPosition, exploring, mapOnly, onExplore, onReturnCamera, onChapter, onMapInteraction, onMapReset, ready = $bindable(false) }: Props = $props();
   let host: HTMLDivElement;
   let map: MapLibreMap | undefined;
   let routeBounds: LngLatBounds;
@@ -188,12 +190,14 @@
   function changeZoom(direction: number) {
     if (!map) return;
     followsStory = false;
+    if (mapOnly) onMapInteraction?.();
     map.easeTo({ zoom: map.getZoom() + direction, duration: 220 });
   }
 
   function fitRoute() {
     if (!map) return;
     followsStory = true;
+    if (mapOnly) onMapReset?.();
     const target = framedCamera(mode ? undefined : framing);
     if (target) map.easeTo({ ...target, duration: 280 });
   }
@@ -619,6 +623,8 @@
         followReading();
         instance.on('movestart', (event) => {
           if (event.originalEvent) followsStory = false;
+          // In map-only mode the cover card would otherwise sit on top of the area being panned.
+          if (mapOnly && event.originalEvent) onMapInteraction?.();
           stopHover();
           if (!isInspectionPinned()) clearInspection();
         });
