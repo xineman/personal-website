@@ -2,7 +2,6 @@
   import { onMount, tick } from 'svelte';
   import { asset } from '$app/paths';
   import posthog from 'posthog-js';
-  import { posthogLog } from '#lib/posthog-log';
   import RouteAtlas from '#lib/map/RouteAtlas.svelte';
   import type { ReadingPosition } from '#lib/map/route-progress.js';
   import type { MapFraming, ScreenPoint } from '#lib/map/route-data.js';
@@ -128,7 +127,7 @@
     }
     exploring = open;
     posthog.capture(open ? 'map_exploration_opened' : 'map_exploration_closed');
-    posthogLog.info(open ? 'Map exploration opened' : 'Map exploration closed', {
+    posthog.logger.info(open ? 'Map exploration opened' : 'Map exploration closed', {
       exploration_state: open ? 'opened' : 'closed'
     });
     document.documentElement.classList.toggle('is-map-exploring', open);
@@ -157,7 +156,7 @@
     const heading = document.getElementById(id);
     if (!heading) return;
     posthog.capture('map_chapter_selected', { chapter_id: id });
-    posthogLog.info('Map chapter selected', { chapter_id: id });
+    posthog.logger.info('Map chapter selected', { chapter_id: id });
     if (window.location.hash !== '#' + id) window.location.hash = id;
     heading.focus({ preventScroll: true });
     heading.scrollIntoView();

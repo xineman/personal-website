@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/generate-route.ts && vite dev",
-    "build": "node scripts/generate-route.ts && vite build",
+    "build": "node scripts/generate-route.ts && vite build && node scripts/upload-posthog-sourcemaps.ts",
     "preview": "bun run build && wrangler dev",
     "generate:route": "node scripts/generate-route.ts",
     "prepare": "svelte-kit sync || echo ''",
@@ -16,10 +16,11 @@
   },
   "dependencies": {
     "maplibre-gl": "^6.19.0",
-    "posthog-js": "1",
+    "posthog-js": "^1.368.0",
     "saxes": "6.0.0"
   },
   "devDependencies": {
+    "@posthog/cli": "^0.20.1",
     "@sveltejs/adapter-cloudflare": "^8.0.2",
     "@sveltejs/kit": "^3.0.0",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",

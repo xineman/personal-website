@@ -1,31 +1,13 @@
-import { dev } from '$app/environment';
-import { env } from '$env/dynamic/public';
-import type { HandleClientError } from '@sveltejs/kit';
+import { dev } from '$app/env';
+import { PUBLIC_POSTHOG_HOST, PUBLIC_POSTHOG_KEY } from '$app/env/public';
+import type { HandleClientError } from '@sveltejs/kit/hooks';
 import posthog from 'posthog-js';
 
 export function init() {
-	const token = env.PUBLIC_POSTHOG_KEY;
-	if (!token) {
-		if (dev) {
-			throw new Error(
-				'PUBLIC_POSTHOG_KEY variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once PUBLIC_POSTHOG_KEY is configured'
-			);
-		}
-		return;
-	}
+	if (!PUBLIC_POSTHOG_KEY || !PUBLIC_POSTHOG_HOST) return;
 
-	const host = env.PUBLIC_POSTHOG_HOST;
-	if (!host) {
-		if (dev) {
-			throw new Error(
-				'PUBLIC_POSTHOG_HOST variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once PUBLIC_POSTHOG_HOST is configured'
-			);
-		}
-		return;
-	}
-
-	posthog.init(token, {
-		api_host: host,
+	posthog.init(PUBLIC_POSTHOG_KEY, {
+		api_host: PUBLIC_POSTHOG_HOST,
 		capture_exceptions: true,
 		logs: {
 			serviceName: 'northcape-cycling-journal',
@@ -34,8 +16,9 @@ export function init() {
 	});
 }
 
-export const handleError: HandleClientError = ({ error, status }) => {
-	if (status !== 404) {
+export const handleError: HandleClientError = ({ kind, error }) => {
+	if (!PUBLIC_POSTHOG_KEY || !PUBLIC_POSTHOG_HOST) return;
+	if (kind === 'unknown' || error.status !== 404) {
 		posthog.captureException(error);
 	}
 };
