@@ -25,13 +25,15 @@
   let updatingReturnPlacement = $state(false);
   let layer: HTMLDivElement;
   let dialog = $state<HTMLDialogElement>();
-  let photoImage = $state<HTMLImageElement>();
+  let photoPrint = $state<HTMLDivElement>();
   let closeButton = $state<HTMLButtonElement>();
   let imageBox = $state.raw<PhotoBox>();
   type PhotoOrigin = { button: HTMLButtonElement; id: string; point: ScreenPoint; box: PhotoBox; cover: boolean };
   type PhotoFlight = { photo: RoutePhoto; from: PhotoFlightBox; base: PhotoFlightBox; destination: () => PhotoFlightBox };
   let origin: PhotoOrigin | undefined;
   let browseTimer: ReturnType<typeof setTimeout> | undefined;
+  let requestedIndex: number | undefined;
+  let departing = $state.raw<{ photo: RoutePhoto; box: PhotoBox; direction: number }>();
   let flight = $state.raw<PhotoFlight>();
   const flightProgress = new Tween(1, { easing: photoFlightEasing });
   let frame: number | undefined;
@@ -64,7 +66,7 @@
     const selected = new Set(selection.members.map(({ id }) => id));
     return groups.filter(({ members, point }) => !members.some(({ id }) => selected.has(id)) &&
       point.x <= width - 23 && point.y <= height - 23)
-      .map((group) => ({ ...group, box: undefined, print: undefined, marker: undefined }));
+      .map((group) => ({ ...group, box: undefined, print: undefined, printScale: undefined, marker: undefined }));
   });
   const returnStack = $derived(closing && origin
     ? stacks.find(({ members }) => members.some(({ id }) => id === origin?.id)) : undefined);
@@ -108,6 +110,12 @@
     return fade(node, { duration: still ? 0 : 140 });
   }
 
+  function revealStackImage(image: HTMLImageElement) {
+    void image.decode().then(() => image.classList.add('is-ready'), () => {
+      // Keep the print's camera placeholder when the image cannot load.
+    });
+  }
+
   function stackLeader(stack: PhotoStack) {
     if (stack.print) {
       const { point: { x, y }, print } = stack;
@@ -144,27 +152,44 @@
     measureUntil = Math.max(measureUntil, until);
     if (frame !== undefined) cancelAnimationFrame(frame);
     const measure = () => {
-      if (!closing && current && photoImage) imageBox = containedBox(photoImage, current);
+      if (!closing && current && photoPrint) imageBox = containedBox(photoPrint, current);
       if (performance.now() < measureUntil) frame = requestAnimationFrame(measure);
       else frame = undefined;
     };
     measure();
   }
 
-  function trackImage(image: HTMLImageElement) {
+  function trackPrint(print: HTMLDivElement) {
     const observer = new ResizeObserver(() => sampleFrame(performance.now()));
-    observer.observe(image);
+    observer.observe(print);
     return { destroy: () => observer.disconnect() };
   }
 
   function revealCurrentThumbnail() {
-    layer.querySelector('.photo-rail [aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const thumbnail = layer.querySelector('.photo-rail [aria-current="true"]');
+    const rail = thumbnail?.closest('ol');
+    if (!thumbnail || !rail) return;
+    const item = thumbnail.getBoundingClientRect();
+    const view = rail.getBoundingClientRect();
+    rail.scrollBy({
+      left: Math.min(0, item.left - view.left) || Math.max(0, item.right - view.right),
+      top: Math.min(0, item.top - view.top) || Math.max(0, item.bottom - view.bottom)
+    });
   }
 
   function trackThumbnails(list: HTMLOListElement) {
     const observer = new ResizeObserver(revealCurrentThumbnail);
     observer.observe(list);
     return { destroy: () => observer.disconnect() };
+  }
+
+  function thumbnailPin() {
+    const pin = layer.querySelector<HTMLElement>('.traveling-dot');
+    const rail = pin?.closest('ol');
+    if (!pin || !rail) return;
+    const { x, y, width, height } = pin.getBoundingClientRect();
+    // Use the rendered position so a quick second selection continues from the moving dot.
+    return { pin, x: x + width / 2 + rail.scrollLeft, y: y + height / 2 + rail.scrollTop };
   }
 
   function cancelFlight() {
@@ -194,6 +219,8 @@
   async function openStack(stack: PhotoStack, target: HTMLButtonElement) {
     const photo = stack.photo;
     const version = ++selectionVersion;
+    requestedIndex = undefined;
+    departing = undefined;
     clearTimeout(browseTimer);
     cancelFlight();
     const thumbnail = target.querySelector('.stack-face img');
@@ -205,10 +232,10 @@
     layout = photoLayout(photo, viewport);
     onFocus(photo, layout);
     await tick();
-    if (version !== selectionVersion || !photoImage) return;
+    if (version !== selectionVersion || !photoPrint) return;
     if (dialog && !dialog.open) dialog.show();
     closeButton?.focus({ preventScroll: true });
-    const destination = containedBox(photoImage, photo);
+    const destination = containedBox(photoPrint, photo);
     movePrint(photo, fittedBox(box, photo, !!thumbnail), () => destination, 375);
     sampleFrame(performance.now() + 390);
   }
@@ -217,8 +244,10 @@
     if (!current || closing) return;
     const photo = current;
     const openedFrom = origin;
-    const from = flightFrame ?? (photoImage && containedBox(photoImage, photo));
+    const from = flightFrame ?? (photoPrint && containedBox(photoPrint, photo));
     closing = true;
+    requestedIndex = undefined;
+    departing = undefined;
     updatingReturnPlacement = true;
     const version = ++selectionVersion;
     clearTimeout(browseTimer);
@@ -260,12 +289,33 @@
     movePrint(photo, from, destination, 280, finish);
   }
 
-  async function changePhoto(index: number, immediate = false) {
-    if (!selection || closing || index === selection.index || !selection.members[index]) return;
+  async function changePhoto(index: number) {
+    if (!selection || !current || closing || index === requestedIndex || !selection.members[index]) return;
+    if (index === selection.index && requestedIndex === undefined) return;
+    const version = ++selectionVersion;
+    requestedIndex = undefined;
+    if (index === selection.index) return;
+
+    const photo = selection.members[index];
+    requestedIndex = index;
+    const incoming = new Image();
+    incoming.src = photo.src;
+    await incoming.decode().catch(() => {});
+    if (version !== selectionVersion || !selection || !current) return;
+    requestedIndex = undefined;
+
     clearTimeout(browseTimer);
     cancelFlight();
+    const stage = photoPrint?.parentElement;
+    if (photoPrint && stage) {
+      const { x, y, width, height } = photoPrint.getBoundingClientRect();
+      const bounds = stage.getBoundingClientRect();
+      departing = { photo: current, box: { x: x - bounds.x, y: y - bounds.y, width, height },
+        direction: Math.sign(index - selection.index) };
+    }
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const fromPin = reducedMotion ? undefined : thumbnailPin();
     selection = { ...selection, index };
-    const photo = selection.members[index];
     const nextLayout = photoLayout(photo, viewport, layout);
     const apply = async () => {
       layout = nextLayout;
@@ -273,14 +323,79 @@
       await tick();
       sampleFrame(performance.now() + 365);
     };
-    if (immediate || nextLayout === layout) await apply();
+    if (nextLayout === layout || reducedMotion) await apply();
     else {
       onFocus(photo, layout);
-      browseTimer = setTimeout(() => void apply(), 210);
+      browseTimer = setTimeout(() => void apply(), 280);
       await tick();
       sampleFrame(performance.now());
     }
-    revealCurrentThumbnail();
+    if (version === selectionVersion) {
+      revealCurrentThumbnail();
+      const toPin = fromPin && thumbnailPin();
+      if (fromPin && toPin) {
+        toPin.pin.animate([
+          { transform: `translate(${fromPin.x - toPin.x}px, ${fromPin.y - toPin.y}px)` },
+          { transform: 'none' }
+        ], { duration: 200, easing: 'cubic-bezier(.3,.75,.25,1)' });
+      }
+    }
+  }
+
+  function stepPhoto(direction: number) {
+    if (selection) void changePhoto((requestedIndex ?? selection.index) + direction);
+  }
+
+  function watchViewerWheel(viewer: HTMLDivElement) {
+    let lastWheel = -Infinity;
+    let travel = 0;
+    let turnDirection = 0;
+    let tailMagnitude = Infinity;
+    function wheel(event: WheelEvent) {
+      if (!selection || closing || event.ctrlKey || !(event.target instanceof Element)) return;
+      if (selection.members.length === 1) {
+        if (layout !== 'fullscreen' && photoPrint?.contains(event.target)) onMapWheel(event);
+        return;
+      }
+
+      const { deltaMode, deltaX, deltaY, timeStamp } = event;
+      const horizontal = Math.abs(deltaX) > Math.abs(deltaY);
+      const delta = horizontal ? deltaX : deltaY;
+      if (!delta) return;
+      const scroller = event.target.closest('.photo-rail ol, .photo-caption');
+      if (scroller && (horizontal ? scroller.scrollWidth > scroller.clientWidth :
+        scroller.scrollHeight > scroller.clientHeight)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const distance = delta * (deltaMode === 1 ? 24 : deltaMode === 2 ? viewer.clientHeight : 1);
+      if (timeStamp - lastWheel > 140) {
+        travel = 0;
+        turnDirection = 0;
+      }
+      lastWheel = timeStamp;
+
+      if (turnDirection) {
+        if (requestedIndex !== undefined || departing) return;
+        // Wheel events carry no momentum flag. Look for a new push against the decaying tail.
+        const magnitude = Math.abs(distance);
+        const freshPush = magnitude >= 4 && (Math.sign(distance) !== turnDirection || magnitude >= tailMagnitude * 2.5);
+        if (!freshPush) {
+          tailMagnitude = Math.min(tailMagnitude, magnitude);
+          travel = 0;
+          return;
+        }
+      }
+
+      travel += distance;
+      if (Math.abs(travel) < 20) return;
+      turnDirection = Math.sign(travel);
+      travel = 0;
+      tailMagnitude = Infinity;
+      stepPhoto(turnDirection);
+    }
+    viewer.addEventListener('wheel', wheel, { passive: false });
+    return { destroy: () => viewer.removeEventListener('wheel', wheel) };
   }
 
   function viewerKeys(event: KeyboardEvent) {
@@ -293,7 +408,7 @@
       (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      void changePhoto(selection.index + (event.key === 'ArrowRight' ? 1 : -1));
+      stepPhoto(event.key === 'ArrowRight' ? 1 : -1);
     }
   }
 
@@ -302,13 +417,14 @@
     const dx = event.clientX - swipeStart.x;
     const dy = event.clientY - swipeStart.y;
     swipeStart = undefined;
-    if (Math.abs(dx) > Math.max(46, Math.abs(dy) * 1.45)) void changePhoto(selection.index - Math.sign(dx));
+    if (Math.abs(dx) > Math.max(46, Math.abs(dy) * 1.45)) stepPhoto(-Math.sign(dx));
   }
 
   $effect(() => {
     if (!selection || closing || !layout || desktopPhotos(viewport) === (layout !== 'fullscreen')) return;
     const photo = selection.members[selection.index];
     cancelFlight();
+    departing = undefined;
     clearTimeout(browseTimer);
     if (dialog?.open) dialog.close();
     layout = photoLayout(photo, viewport);
@@ -323,6 +439,7 @@
   });
 
   onDestroy(() => {
+    ++selectionVersion;
     clearTimeout(browseTimer);
     if (frame !== undefined) cancelAnimationFrame(frame);
     void placementProgress.set(1, { duration: 0 });
@@ -341,15 +458,26 @@
 {/snippet}
 
 {#snippet viewer(photo: RoutePhoto)}
-  <div class="photo-frame" class:closing class:has-strip={selection && selection.members.length > 1}
+  <div class="photo-frame" class:closing class:has-strip={selection && selection.members.length > 1} use:watchViewerWheel
     style:--photo-ratio={photo.width / photo.height} style:--tallest-ratio={tallestRatio}>
     <div class="photo-view">
-      <div class="photo-stage">
-        <img class="expanded-photo" class:flying={flight} bind:this={photoImage} use:trackImage src={photo.src} alt={photo.alt}
-          width={photo.width} height={photo.height} onpointerdown={(event) => {
-            if (event.pointerType === 'touch') swipeStart = { pointer: event.pointerId, x: event.clientX, y: event.clientY };
-          }} onpointerup={finishSwipe} onpointercancel={() => { swipeStart = undefined; }}
-          onwheel={layout === 'fullscreen' ? undefined : onMapWheel} />
+      <div class="photo-stage" style:--browse-direction={departing?.direction ?? 1}>
+        <div class="photo-print" class:flying={flight} bind:this={photoPrint} use:trackPrint>
+          {#key photo.id}
+            <img class="expanded-photo" class:arriving={departing} src={photo.src} alt={photo.alt}
+              width={photo.width} height={photo.height} onpointerdown={(event) => {
+                if (event.pointerType === 'touch') swipeStart = { pointer: event.pointerId, x: event.clientX, y: event.clientY };
+              }} onpointerup={finishSwipe} onpointercancel={() => { swipeStart = undefined; }} />
+          {/key}
+        </div>
+        {#if departing}
+          {#key departing}
+            {@const { photo: previous, box } = departing}
+            <img class="departing-print" src={previous.src} alt="" aria-hidden="true"
+              style:left={`${box.x}px`} style:top={`${box.y}px`} style:width={`${box.width}px`} style:height={`${box.height}px`}
+              onanimationend={() => { departing = undefined; }} />
+          {/key}
+        {/if}
         <button class="close-photo" type="button" aria-label="Close photo" bind:this={closeButton} onclick={close}>
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg>
         </button>
@@ -362,11 +490,11 @@
         </div>
         {#if selection && selection.members.length > 1}
           <div class="photo-steps" role="group" aria-label="Photos in this group">
-            <button type="button" aria-label="Previous photo" onclick={() => changePhoto(selection!.index - 1)} disabled={selection.index === 0}>
+            <button type="button" aria-label="Previous photo" onclick={() => stepPhoto(-1)} disabled={selection.index === 0}>
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 5-5 5 5 5"/></svg>
             </button>
             <span>{selection.index + 1} / {selection.members.length}</span>
-            <button type="button" aria-label="Next photo" onclick={() => changePhoto(selection!.index + 1)} disabled={selection.index === selection.members.length - 1}>
+            <button type="button" aria-label="Next photo" onclick={() => stepPhoto(1)} disabled={selection.index === selection.members.length - 1}>
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg>
             </button>
           </div>
@@ -374,15 +502,19 @@
       </div>
     </div>
     {#if selection && selection.members.length > 1}
-      <section class="photo-rail" aria-label={samePhotoStop(selection.members) ? 'Photos at this stop' : 'Photos along this stretch'}>
+      <section class="photo-rail" class:rail-changing={departing}
+        aria-label={samePhotoStop(selection.members) ? 'Photos at this stop' : 'Photos along this stretch'}>
         <ol role="list" use:trackThumbnails>
           {#each selection.members as member, index (member.id)}
             <li>
+              {#if index === selection.index}<span class="traveling-dot" aria-hidden="true"></span>{/if}
               <button type="button" aria-label={'Show ' + member.caption}
                 aria-current={index === selection.index ? 'true' : undefined}
-                onclick={() => changePhoto(index, true)}>
-                <img src={member.src} alt="" loading="lazy" decoding="async" />
-                <span>{member.time ?? member.date ?? 'Photo ' + (index + 1)}</span>
+                onclick={() => changePhoto(index)}>
+                <span class="thumbnail-print">
+                  <img src={member.src} alt="" loading="lazy" decoding="async" />
+                  <span class="thumbnail-time">{member.time ?? member.date ?? 'Photo ' + (index + 1)}</span>
+                </span>
               </button>
             </li>
           {/each}
@@ -393,47 +525,54 @@
 {/snippet}
 
 <div class="route-photos ph-no-capture" bind:this={layer} style={viewportStyle} style:--photo-marker-size={`${photoMarkerSize}px`}>
-  <svg class="print-leaders" aria-hidden="true" viewBox={`0 0 ${viewport.width} ${viewport.height}`}>
-    {#each stacks as stack (stack.photo.id)}
-      {#if (stack.print || stack.marker) && stack.photo.id !== returnStack?.photo.id}
-        <g>
-          {@render leader(stackLeader(stack))}
-          <circle class="stack-point-casing" cx={stack.point.x} cy={stack.point.y} r="5.5" />
-          <circle class="stack-point" cx={stack.point.x} cy={stack.point.y} r="4" />
-        </g>
-      {/if}
-    {/each}
-  </svg>
+  <div class="photo-stacks">
+    <svg class="print-leaders" aria-hidden="true" viewBox={`0 0 ${viewport.width} ${viewport.height}`}>
+      {#each stacks as stack (stack.photo.id)}
+        {#if (stack.print || stack.marker) && stack.photo.id !== returnStack?.photo.id}
+          <g>
+            {@render leader(stackLeader(stack))}
+            <circle class="stack-point-casing" cx={stack.point.x} cy={stack.point.y} r="5.5" />
+            <circle class="stack-point" cx={stack.point.x} cy={stack.point.y} r="4" />
+          </g>
+        {/if}
+      {/each}
+    </svg>
 
-  {#each stacks as stack (stack.photo.id)}
-    <button type="button" class="map-photo" class:has-print={stack.print} class:stacked={stack.members.length > 1}
-      transition:fadeStack
-      class:returning={stack.photo.id === returnStack?.photo.id}
-      data-photo-id={stack.photo.id}
-      aria-label={stack.members.length > 1 ? `Open ${stack.members.length} photos` : 'Open ' + stack.photo.caption}
-      aria-haspopup={desktopPhotos(viewport) ? undefined : 'dialog'}
-      style:left={(stack.box?.x ?? stack.marker?.x ?? stack.point.x) + 'px'}
-      style:top={(stack.box?.y ?? stack.marker?.y ?? stack.point.y) + 'px'}
-      style:width={stack.box && stack.box.width + 'px'} onclick={(event) => openStack(stack, event.currentTarget)}
-      onwheel={onMapWheel}>
-      {#if stack.print}
-        {#each stack.members.filter((photo) => photo !== stack.photo).slice(0, 2) as other (other.id)}
-          <span class="stack-back" aria-hidden="true" style:height={stack.print.height + 'px'}>
-            <img src={other.src} alt="" loading="lazy" decoding="async" />
+    {#each stacks as stack (stack.photo.id)}
+      {@const scale = stack.printScale ?? 1}
+      <button type="button" class="map-photo" class:has-print={stack.print} class:stacked={stack.members.length > 1}
+        transition:fadeStack
+        class:returning={stack.photo.id === returnStack?.photo.id}
+        data-photo-id={stack.photo.id}
+        aria-label={stack.members.length > 1 ? `Open ${stack.members.length} photos` : 'Open ' + stack.photo.caption}
+        aria-haspopup={desktopPhotos(viewport) ? undefined : 'dialog'}
+        style:left={(stack.box?.x ?? stack.marker?.x ?? stack.point.x) + 'px'}
+        style:top={(stack.box?.y ?? stack.marker?.y ?? stack.point.y) + 'px'}
+        style:width={stack.box && stack.box.width / scale + 'px'} style:scale={stack.printScale}
+        onclick={(event) => openStack(stack, event.currentTarget)}
+        onwheel={onMapWheel}>
+        {#if stack.print}
+          {#each stack.members.filter((photo) => photo !== stack.photo).slice(0, 2) as other (other.id)}
+            <span class="stack-back" aria-hidden="true" style:height={stack.print.height / scale + 'px'}>
+              <img src={other.src} alt="" fetchpriority="low" decoding="async" use:revealStackImage />
+            </span>
+          {/each}
+          <span class="stack-face">
+            <span class="stack-image" style:height={stack.print.height / scale + 'px'}>
+              {@render cameraIcon()}
+              <img src={stack.photo.src} alt="" decoding="async" use:revealStackImage />
+            </span>
+            {#if stack.members.length > 1}<span class="print-label">{stack.members.length} photos</span>
+            {:else}<span class="print-label single">{stack.photo.caption}</span>{/if}
           </span>
-        {/each}
-        <span class="stack-face">
-          <img src={stack.photo.src} alt="" style:height={stack.print.height + 'px'} loading="lazy" decoding="async" />
-          {#if stack.members.length > 1}<span class="print-label">{stack.members.length} photos</span>
-          {:else}<span class="print-label single">{stack.photo.caption}</span>{/if}
-        </span>
-      {:else if stack.members.length > 1}
-        {stack.members.length}
-      {:else}
-        {@render cameraIcon()}
-      {/if}
-    </button>
-  {/each}
+        {:else if stack.members.length > 1}
+          {stack.members.length}
+        {:else}
+          {@render cameraIcon()}
+        {/if}
+      </button>
+    {/each}
+  </div>
 
   {#if current && layout === 'fullscreen'}
     <dialog class="full-photo" bind:this={dialog} aria-labelledby="route-photo-title"
@@ -462,6 +601,8 @@
 
 <style>
   .route-photos { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  .photo-stacks { position: absolute; inset: 0; animation: photo-stacks-in 200ms ease-out; }
+  @keyframes photo-stacks-in { from { opacity: .35; } }
   .print-leaders,.active-leader { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .active-leader { z-index: 4; }
   .flying-photo { position: absolute; z-index: 10; top: 0; left: 0; max-width: none; transform-origin: top left; pointer-events: none; }
@@ -483,7 +624,7 @@
     stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
   .map-photo.has-print {
     grid-template-columns: minmax(0, 1fr); place-items: stretch; translate: none; height: auto;
-    border: 0; border-radius: 0; text-align: left; background: transparent; isolation: isolate;
+    transform-origin: top left; border: 0; border-radius: 0; text-align: left; background: transparent; isolation: isolate;
   }
   .map-photo.has-print:focus-visible { outline: none; }
   .map-photo:not(.returning):focus-visible .stack-face { outline: 2px solid var(--color-ink); outline-offset: -2px; }
@@ -492,8 +633,16 @@
     transform: translate(6px,-3px) rotate(6deg); transform-origin: 50% 80%; }
   .stack-back:nth-of-type(2) { transform: translate(9px,-4px) rotate(10deg); }
   .stack-face { position: relative; min-width: 0; }
-  .stack-face img,.stack-back img { width: 100%; object-fit: cover; }
-  .stack-back img { height: 100%; }
+  .stack-image,.stack-back { background: color-mix(in srgb, var(--color-map-water) 32%, var(--color-paper)); }
+  .stack-image { display: grid; place-items: center; }
+  .stack-image > :is(img,svg) { grid-area: 1 / 1; }
+  .stack-image > :is(img,svg),.stack-back img { transition: opacity 180ms ease-out; }
+  .stack-image svg { opacity: .65; }
+  .stack-image:has(img:global(.is-ready)) svg { opacity: 0; }
+  .stack-image img,.stack-back img {
+    width: 100%; height: 100%; min-height: 0; object-fit: cover; opacity: 0;
+  }
+  :is(.stack-image,.stack-back) img:global(.is-ready) { opacity: 1; }
   .print-label { display: block; padding: 4px 5px; overflow: hidden; white-space: nowrap;
     text-overflow: ellipsis; font: 720 .67rem/1.2 var(--font-ui); }
   .map-photo:hover .print-label,.map-photo:focus-visible .print-label { background: var(--color-route); }
@@ -539,7 +688,7 @@
     justify-self: center;
     width: min(100%, 75rem, max(30rem, calc((100dvh - var(--map-height) - 5rem) * var(--photo-ratio) + var(--strip-width))));
   }
-  .photo-frame.closing,.expanded-photo.flying { visibility: hidden; }
+  .photo-frame.closing,.photo-print.flying { visibility: hidden; }
   .photo-view {
     display: grid;
     grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
@@ -547,28 +696,54 @@
     min-height: 0;
   }
   .photo-stage {
+    --browse-x: 0%;
+    --browse-y: calc(1% * var(--browse-direction));
     position: relative;
     display: grid;
     place-items: center;
     container-type: size;
+    overflow: clip;
     padding: .3rem;
     background: var(--photo-mat);
   }
-  .expanded-photo {
+  .photo-print {
     width: min(100cqw, calc(100cqh * var(--photo-ratio)));
-    height: auto;
     aspect-ratio: var(--photo-ratio);
+  }
+  .expanded-photo,.departing-print {
+    display: block;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     outline: 1px solid var(--color-ink);
     outline-offset: -1px;
-    touch-action: pan-y;
   }
+  .expanded-photo { touch-action: pan-y; }
+  .expanded-photo.arriving { animation: print-settle 245ms cubic-bezier(.16,1,.3,1) both; }
+  .departing-print {
+    position: absolute;
+    pointer-events: none;
+    animation: print-lift 245ms cubic-bezier(.33,.1,.55,1) both;
+  }
+  @keyframes print-settle {
+    from { transform: translate(calc(3 * var(--browse-x)), calc(3 * var(--browse-y))) rotate(calc(-1.2deg * var(--browse-direction))); }
+    to { transform: none; }
+  }
+  @keyframes print-lift {
+    42% { opacity: 1; }
+    72% { opacity: 0; }
+    to {
+      transform: translate(calc(-17 * var(--browse-x)), calc(-17 * var(--browse-y))) rotate(calc(4deg * var(--browse-direction)));
+      opacity: 0;
+    }
+  }
+  @keyframes print-dissolve { to { opacity: 0; } }
   .close-photo,.photo-steps button {
     display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
     border: 0; background: transparent; color: inherit;
   }
   .close-photo {
-    position: absolute; top: .55rem; right: .55rem;
+    position: absolute; z-index: 1; top: .55rem; right: .55rem;
     border: 1px solid var(--color-ink); background: var(--color-paper); color: var(--color-ink);
   }
   .close-photo:hover,.photo-steps button:hover:enabled { background: var(--color-route); color: var(--color-ink); }
@@ -591,6 +766,7 @@
   .photo-steps span { min-width: 2rem; text-align: center; }
 
   .photo-rail {
+    --thumbnail-settle-delay: 90ms;
     display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     min-width: 0; min-height: 0;
     border-left: 1px solid var(--color-ink);
@@ -616,23 +792,47 @@
     left: 0; width: 7px; height: 7px; translate: -50% -50%;
     border: 1px solid var(--color-ink); border-radius: 50%; background: var(--color-paper);
   }
-  .photo-rail li:has([aria-current])::after { width: 11px; height: 11px; background: var(--color-route); }
   .photo-rail li:has([aria-current])::before { background: var(--color-ink); }
+  .rail-changing li:has([aria-current])::before {
+    transform-origin: var(--connector-origin, left);
+    animation: draw-photo-connector 140ms ease-out var(--thumbnail-settle-delay) backwards;
+  }
+  @keyframes draw-photo-connector { from { scale: var(--connector-start, 0 1); } }
+  .traveling-dot {
+    position: absolute; top: 50%; left: 0; z-index: 1;
+    width: 11px; height: 11px; translate: -50% -50%;
+    border: 1px solid var(--color-ink); border-radius: 50%;
+    background: var(--color-route); pointer-events: none;
+  }
   .photo-rail button {
-    display: grid; width: 100%; min-height: 44px; padding: 3px 3px 0;
-    border: 1px solid var(--color-unread); background: var(--color-paper);
-    color: var(--color-ink); text-align: left;
+    display: grid; width: 100%; min-height: 44px; padding: 0;
+    border: 0; background: transparent; color: var(--color-ink); text-align: left;
   }
   .photo-rail button:focus-visible { outline-offset: 2px; }
-  .photo-rail button:hover { border-color: var(--color-ink); }
-  .photo-rail button[aria-current] { background: var(--color-route); border-color: var(--color-ink); }
+  .thumbnail-print {
+    display: grid; padding: 3px 3px 0;
+    border: 1px solid var(--color-unread); background: var(--color-paper);
+    transition: translate 150ms ease-out, background-color 150ms ease-out;
+  }
+  .photo-rail button:hover .thumbnail-print { border-color: var(--color-ink); }
+  .photo-rail button[aria-current] .thumbnail-print {
+    translate: var(--print-selection-shift, -3px 0);
+    border-color: var(--color-ink); background: var(--color-route);
+  }
+  .rail-changing button[aria-current] .thumbnail-print {
+    animation: settle-thumbnail 145ms cubic-bezier(.2,.8,.2,1) var(--thumbnail-settle-delay) backwards;
+  }
+  @keyframes settle-thumbnail {
+    from { translate: 0 0; rotate: -1.5deg; background-color: var(--color-paper); }
+  }
   .photo-rail img { width: 100%; height: clamp(42px, 9dvh, 84px); object-fit: cover; background: var(--color-map-water); }
-  .photo-rail span {
+  .thumbnail-time {
     padding: .26rem .18rem .28rem; font-size: .7rem; font-weight: 750;
     font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
   }
 
   @media (max-width: 599px), (min-height: 520px) and (max-width: 899px) {
+    .full-photo .photo-stage { --browse-x: calc(1% * var(--browse-direction)); --browse-y: 0%; }
     .full-photo .photo-frame {
       align-self: center;
       height: min(100%, calc((100vw - 1.75rem) / var(--tallest-ratio) + 4.75rem));
@@ -641,7 +841,12 @@
       grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
       height: min(100%, calc((100vw - 1.75rem) / var(--tallest-ratio) + 11.25rem));
     }
-    .full-photo .photo-rail { border-left: 0; border-top: 1px solid var(--color-ink); }
+    .full-photo .photo-rail {
+      --connector-origin: top;
+      --connector-start: 1 0;
+      --print-selection-shift: 0 -3px;
+      border-left: 0; border-top: 1px solid var(--color-ink);
+    }
     .full-photo .photo-rail ol { flex-direction: row; padding: .65rem .4rem .35rem; }
     .full-photo .photo-rail li {
       width: clamp(72px, 23vw, 106px); padding: calc(.5rem + var(--stagger)) .25rem .25rem;
@@ -652,8 +857,16 @@
       top: 0; left: 50%; width: 1px; height: calc(.5rem + var(--stagger)); clip-path: none;
     }
     .full-photo .photo-rail li::after { top: 0; left: 50%; }
+    .full-photo .traveling-dot { top: 0; left: 50%; }
     .full-photo .photo-rail img { height: clamp(36px, 6dvh, 62px); }
   }
   @media (max-width: 699px) { .print-label.single { display: none; } }
-  @media (prefers-reduced-motion: reduce) { .split-photo { transition: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .photo-stacks,.expanded-photo.arriving { animation: none; }
+    .departing-print { animation: print-dissolve 130ms ease-out both; }
+    .stack-image > :is(img,svg),.stack-back img,.split-photo { transition: none; }
+    .rail-changing li:has([aria-current])::before,
+    .rail-changing button[aria-current] .thumbnail-print { animation: none; }
+    .thumbnail-print { transition: none; }
+  }
 </style>

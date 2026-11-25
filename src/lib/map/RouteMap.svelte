@@ -175,6 +175,7 @@
       instance.scrollZoom.enable();
     } else {
       clearInspection();
+      projectedPhotos = [];
       photoPane = undefined;
       photoOrigin = undefined;
       photoViewPoint = undefined;

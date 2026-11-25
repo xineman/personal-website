@@ -22,8 +22,8 @@ export type ProjectedPhoto = { photo: RoutePhoto; point: ScreenPoint };
 type Print = PhotoBox & { imageHeight: number };
 type PrintSlot = { side: number; offset: number; gap: number };
 export type PhotoPlacement = { photo: RoutePhoto; members: RoutePhoto[]; slot?: PrintSlot; print?: Print };
-export type PhotoPosition = { print?: Print; marker?: ScreenPoint };
-export type PhotoStack = ProjectedPhoto & { members: RoutePhoto[]; marker?: ScreenPoint; box?: PhotoBox; print?: PhotoBox };
+export type PhotoPosition = { print?: Print; marker?: ScreenPoint; printScale?: number };
+export type PhotoStack = ProjectedPhoto & { members: RoutePhoto[]; marker?: ScreenPoint; box?: PhotoBox; print?: PhotoBox; printScale?: number };
 export const photoMarkerSize = 34;
 
 export function photoFlightEasing(progress: number) {
@@ -182,10 +182,16 @@ export function photoPosition(placement: PhotoPlacement, previous: PhotoPosition
   const mix = (a: number, b: number) => a + (b - a) * progress;
   if (print) {
     // A print changing sides would otherwise slide over the point it labels.
-    if (!from || Math.sign(from.x) !== Math.sign(print.x)) return { print };
-    return { print: { x: mix(from.x, print.x), y: mix(from.y, print.y),
-      width: mix(from.width, print.width), height: mix(from.height, print.height),
-      imageHeight: mix(from.imageHeight, print.imageHeight) } };
+    if (from && !previous.printScale && Math.sign(from.x) !== Math.sign(print.x)) return { print };
+    const scale = previous.printScale ?? (from ? 1 : photoMarkerSize / Math.max(print.width, print.imageHeight));
+    const marker = previous.marker ?? { x: 0, y: 0 };
+    // Begin with the image centered on the marker and the same size as its badge.
+    const start = from ?? { x: marker.x - print.width * scale / 2, y: marker.y - print.imageHeight * scale / 2,
+      width: print.width * scale, height: print.height * scale, imageHeight: print.imageHeight * scale };
+    return { print: { x: mix(start.x, print.x), y: mix(start.y, print.y),
+      width: mix(start.width, print.width), height: mix(start.height, print.height),
+      imageHeight: mix(start.imageHeight, print.imageHeight) },
+      printScale: scale < 1 ? mix(scale, 1) : undefined };
   }
   const marker = from ? { x: from.x + from.width / 2, y: from.y + from.imageHeight / 2 } : previous.marker;
   return { marker: marker && { x: mix(marker.x, 0), y: mix(marker.y, 0) } };
@@ -196,6 +202,7 @@ export function projectPhotoStack(placement: PhotoPlacement, point: ScreenPoint,
   const box = print && { x: point.x + print.x, y: point.y + print.y, width: print.width, height: print.height };
   return { photo: placement.photo, members: placement.members, point, box,
     print: box && { ...box, height: print!.imageHeight },
+    printScale: position.printScale,
     marker: marker && { x: point.x + marker.x, y: point.y + marker.y } };
 }
 
