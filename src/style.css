@@ -87,6 +87,7 @@ h1, h2, p, figure { margin: 0; }
 .ride-facts span { width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
 .cover__action { display: inline-flex; align-items: center; gap: .6rem; min-height: 2.75rem; margin-top: 1.1rem; font-weight: 760; }
 .cover__action svg { flex: none; }
+.article-hidden .cover { margin-bottom: 0; }
 .journal { grid-row: 2; padding-inline: var(--edge); pointer-events: none; }
 .story-panel {
   width: min(53%, 45rem);
@@ -209,6 +210,7 @@ h1, h2, p, figure { margin: 0; }
   .cover h1 br { display: none; }
   .cover p { margin-top: .75rem; }
   .cover__action { margin-top: .65rem; }
+  .journey.article-hidden { display: flex; flex-direction: column; min-height: calc(100svh - 3.4rem); }
   .journal { padding: 0; }
   .story-panel, .story-panel:last-child {
     width: min(100%, 43rem);

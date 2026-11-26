@@ -1,0 +1,12 @@
+[
+  {"key": "swedish-shelter", "coordinates": [15.10593, 57.75111], "day": 9, "time": "23:32", "note": "Around 2 km off the recorded route"},
+  {"key": "late-ride", "coordinates": [26.8730531, 67.9856722], "day": 18, "time": "21:26"},
+  {"key": "sauna-interior", "coordinates": [27.1205488, 68.1001391], "day": 18, "time": "22:47"},
+  {"key": "late-stop", "coordinates": [27.1205975, 68.0999745], "day": 18, "time": "22:53"},
+  {"key": "lapland-evening", "coordinates": [27.12076, 68.1003], "day": 18, "time": "22:54"},
+  {"key": "handlebars", "coordinates": [27.5404069, 68.6567535], "day": 19, "time": "13:36"},
+  {"key": "lake-cabin", "coordinates": [26.45968, 69.35511], "day": 19, "time": "22:02"},
+  {"key": "norway-rainbow", "coordinates": [24.9191416, 70.1156092], "day": 20, "time": "17:01"},
+  {"key": "island-road", "coordinates": [25.7688195, 70.9804664], "day": 21, "time": "15:54"},
+  {"key": "finish-breakfast", "coordinates": [25.96705, 70.98476], "day": 22, "time": "07:16", "note": "Near the start of the recorded ride"}
+]
