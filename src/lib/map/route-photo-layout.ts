@@ -175,14 +175,35 @@ export function samePhotoPlacements(a: PhotoPlacement[], b: PhotoPlacement[]) {
   });
 }
 
+function crossPhotoPrint(from: Print, to: Print, fromScale: number, progress: number): PhotoPosition {
+  const travel = progress * progress * (3 - 2 * progress);
+  const mix = (a: number, b: number) => a + (b - a) * travel;
+  const fold = Math.sin(Math.PI * travel);
+  const width = mix(from.width, to.width);
+  const imageHeight = mix(from.imageHeight, to.imageHeight);
+  const compactScale = Math.min(1, photoMarkerSize / Math.max(width, imageHeight));
+  const scale = 1 - (1 - compactScale) * fold;
+  const height = mix(from.height, to.height) * scale;
+  const centerX = mix(from.x + from.width / 2, to.x + to.width / 2);
+  const centerY = mix(from.y + from.height / 2, to.y + to.height / 2);
+  // Pass the route pin at badge size, with enough clearance to keep the pin visible.
+  const pinClearanceY = -height / 2 - 8;
+  const y = centerY + (pinClearanceY - centerY) * fold - height / 2;
+  return { print: { x: centerX - width * scale / 2, y, width: width * scale, height, imageHeight: imageHeight * scale },
+    printScale: mix(fromScale, 1) * scale };
+}
+
 export function photoPosition(placement: PhotoPlacement, previous: PhotoPosition | undefined, progress: number): PhotoPosition {
   const print = placement.print;
   if (!previous || progress === 1) return { print };
   const from = previous.print;
-  const mix = (a: number, b: number) => a + (b - a) * progress;
+  const eased = 1 - (1 - progress) ** 3;
+  const mix = (a: number, b: number) => a + (b - a) * eased;
   if (print) {
-    // A print changing sides would otherwise slide over the point it labels.
-    if (from && !previous.printScale && Math.sign(from.x) !== Math.sign(print.x)) return { print };
+    if (from && Math.abs(from.y - print.y) > 1 &&
+      Math.sign(from.x + from.width / 2) !== Math.sign(print.x + print.width / 2)) {
+      return crossPhotoPrint(from, print, previous.printScale ?? 1, progress);
+    }
     const scale = previous.printScale ?? (from ? 1 : photoMarkerSize / Math.max(print.width, print.imageHeight));
     const marker = previous.marker ?? { x: 0, y: 0 };
     // Begin with the image centered on the marker and the same size as its badge.
@@ -214,7 +235,9 @@ export function photoLeader(anchor: ScreenPoint, box: PhotoBox, layout: PhotoLay
   }
   const fromRight = anchor.x > box.x + box.width / 2;
   const x = fromRight ? box.x + box.width : box.x;
-  const y = Math.max(box.y + 8, Math.min(anchor.y, box.y + box.height - 8));
+  const inset = Math.min(8, box.height / 2);
+  const y = Math.max(box.y + inset, Math.min(anchor.y, box.y + box.height - inset));
+  const endGap = Math.min(12, Math.abs(x - anchor.x) * .45);
   const elbow = anchor.x + (x - anchor.x) * .55;
-  return `M${anchor.x},${anchor.y} H${elbow} L${x + (fromRight ? 12 : -12)},${y} H${x}`;
+  return `M${anchor.x},${anchor.y} H${elbow} L${x + (fromRight ? endGap : -endGap)},${y} H${x}`;
 }

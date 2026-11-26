@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onDestroy, tick, untrack } from 'svelte';
-  import { cubicOut } from 'svelte/easing';
   import { Tween } from 'svelte/motion';
   import { fade } from 'svelte/transition';
   import type { ScreenPoint } from './route-data.js';
@@ -42,7 +41,7 @@
   let selectionVersion = 0;
   let placements = $state.raw<PhotoPlacement[]>([]);
   let previousPositions = $state.raw(new Map<string, PhotoPosition>());
-  const placementProgress = new Tween(1, { duration: 200, easing: cubicOut });
+  const placementProgress = new Tween(1, { duration: 200 });
 
   const current = $derived(selection?.members[selection.index]);
   const tallestRatio = $derived(selection?.members.reduce((ratio, photo) =>
